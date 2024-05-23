@@ -1,3 +1,4 @@
+/* TODO: Migrating class to function */
 import React, {BaseSyntheticEvent, Component} from "react";
 
 export interface seatProps {

@@ -1,3 +1,4 @@
+/* TODO: Migrating class to function */
 import * as React from 'react'
 import {Component} from 'react'
 import {SeatButton, seatStatus} from "./seatButton";

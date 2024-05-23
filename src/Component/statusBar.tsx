@@ -1,3 +1,4 @@
+/* TODO: Migrating class to function */
 import React, {Component} from "react";
 
 interface barProps {
