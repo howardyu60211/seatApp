@@ -62,7 +62,7 @@ export class SeatTable extends Component<NonNullable<unknown>, SeatTableState> {
 
 
 
-        if (this.isEmpty()) {
+        if (!this.isEmpty()) {
             if (!confirm("您有尚未儲存的座位表，是否重新生成座位?")) {
                 return
             }
