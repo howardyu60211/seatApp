@@ -1,0 +1,16 @@
+.titleBar {
+    -webkit-app-region: drag;
+}
+
+[draggable="true"] {
+    -webkit-user-select: none;
+}
+
+.font-sans {
+    font-family: Open Sans;
+}
+
+.text-xxs {
+    font-size: 0.65rem;
+    line-height: 1rem;
+}
