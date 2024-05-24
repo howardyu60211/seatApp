@@ -1,4 +1,4 @@
-import {SeatTable} from "./Component/seatTable";
+import {SeatTable} from "./Compontent/SeatTable"
 import {Button, Dialog, DialogPanel, DialogTitle, Transition, TransitionChild} from "@headlessui/react";
 import React, {useState} from "react";
 import * as appInfo from "../package.json"
@@ -96,7 +96,7 @@ export default function Index() {
                 </Dialog>
             </Transition>
 
-            <SeatTable></SeatTable>
+            <SeatTable />
         </>
     )
 }
