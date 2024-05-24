@@ -6,7 +6,6 @@ import {seatStatus, SeatButton} from "./seatButton";
 import StatusBar from "./seatBar";
 import {useMemo} from "react";
 
-
 const gridClasses = [
     "grid-cols-1",
     "grid-cols-2",
@@ -22,6 +21,7 @@ const gridClasses = [
     "grid-cols-12"
 ];
 
+/* TODO: Ask for unwanted dialog. */
 export const SeatTable: React.FC = () => {
     const [rowCount, setRowCount] = React.useState(6);
     const [colCount, setColCount] = React.useState(8);
