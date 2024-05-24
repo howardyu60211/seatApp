@@ -2,9 +2,8 @@ import * as React from 'react'
 
 import * as XLSX from "xlsx";
 import {saveAs} from "file-saver";
-import {seatStatus, SeatButton} from "./seatButton";
 import StatusBar from "./seatBar";
-import {useMemo} from "react";
+import {SyntheticEvent} from "react";
 
 const gridClasses = [
     "grid-cols-1",
@@ -21,12 +20,18 @@ const gridClasses = [
     "grid-cols-12"
 ];
 
+export enum seatStatus {
+    emp = "emp",
+    ava = "ava",
+    occ = "occ",
+}
+
 /* TODO: Ask for unwanted dialog. */
 export const SeatTable: React.FC = () => {
     const [rowCount, setRowCount] = React.useState(6);
     const [colCount, setColCount] = React.useState(8);
-    const [seatStatusList, setSeatStatusList] = React.useState(new Array(8 * 6).fill(seatStatus.ava));
-    const [seatNameList, setSeatNameList] = React.useState(new Array(8 * 6).fill(""));
+    const [seatList, setSeatList] = React.useState(
+        new Array(48).fill({status: seatStatus.ava, name: ""}));
 
     const resizeSeat = () => {
         const tc = parseInt((document.getElementById("col")as HTMLInputElement).value), tr = parseInt((document.getElementById("row")as HTMLInputElement).value)
@@ -39,50 +44,40 @@ export const SeatTable: React.FC = () => {
         } else if (tr >= 30) {
             alert("輸入列數需小於30")
             return
-        } else if (!isEmpty() && !confirm("您有尚未儲存的座位表，是否重新生成座位?")) {
+        } else if (seatList.filter((seat) => {
+            return seat.status !== seatStatus.ava
+        }).length !== 0 && !confirm("您有尚未儲存的座位表，是否重新生成座位?")) {
             return
         }
         setColCount(tc)
         setRowCount(tr)
-        setSeatNameList(new Array(tc * tr).fill(""))
-        setSeatStatusList(new Array(tc * tr).fill(seatStatus.ava))
+        setSeatList(new Array(rowCount * colCount).fill({status: seatStatus.ava, name: ""}))
     }
 
     const changeSeatStatus = (i: Readonly<number>, status: Readonly<seatStatus>, text = "") => {
-        setSeatStatusList(prevSeatStatusList => prevSeatStatusList.map((seatStatus, n) => {
+        setSeatList(prevSeatList => prevSeatList.map((seat, n) => {
             if (n === i) {
-                return status;
-            } else {
-                return seatStatus;
+                if (status === seatStatus.ava) return {status: seatStatus.ava, name: ""}
+                else if (status === seatStatus.emp) return {status: seatStatus.emp, name: "X"};
+                else return {status: seatStatus.occ, name: text};
             }
-        }));
-        setSeatNameList(prevSeatNameList => prevSeatNameList.map((seatName, n) => {
-            if (n === i) {
-                if (status === seatStatus.ava) return "";
-                else if (status === seatStatus.emp) return "X";
-                else return text;
-            } else {
-                return seatName;
-            }
+            return seat;
         }));
     };
 
     const clear = () => {
-        setSeatStatusList(seatStatusList.map(() => {
-                return seatStatus.ava;
-        }));
-        setSeatNameList(seatNameList.map(() => {
-                return ""
+        setSeatList(prevSeatList => prevSeatList.map(() => {
+            return {status: seatStatus.ava, name: ""}
         }));
     }
 
     React.useEffect(() => {
-        console.log(seatStatusList, seatNameList);
-    }, [seatStatusList, seatNameList]);
+        console.log(seatList);
+    }, [seatList]);
 
     const importExcel = () => {
         const input = document.createElement('input');
-        input.accept ='.xlsx'
+        input.accept = '.xlsx'
         input.type = 'file'
         input.onchange = () => {
             const files = Array.from(input.files);
@@ -92,19 +87,19 @@ export const SeatTable: React.FC = () => {
                 reader.onload = (e: ProgressEvent<FileReader>) => {
                     // Parse data
                     const binaryStr = e.target?.result;
-                    const wb = XLSX.read(binaryStr, { type: 'binary' });
+                    const wb = XLSX.read(binaryStr, {type: 'binary'});
 
                     // Get first worksheet
                     const wsname = wb.SheetNames[0];
                     const ws = wb.Sheets[wsname];
 
                     // Convert array of arrays
-                    const data:[][] = XLSX.utils.sheet_to_json(ws, { header: 1 });
-                    const flatdata:string[] = []
+                    const data: [][] = XLSX.utils.sheet_to_json(ws, {header: 1});
+                    const flatdata: string[] = []
 
                     for (const row of data) {
                         let stu = ""
-                        for(const ele of row) {
+                        for (const ele of row) {
                             stu += ele
                         }
                         flatdata.push(stu)
@@ -121,22 +116,11 @@ export const SeatTable: React.FC = () => {
         input.click();
     }
 
-    const isEmpty = () => {
-        let changed = false
-        for (const eachStatus of seatStatusList) {
-            if (eachStatus !== seatStatus.ava) {
-                changed = true
-                break
-            }
-        }
-        return !changed
-    }
-
     const phaseExcel = (students: string[]) => {
         let cap = 0
-        for (const i of seatStatusList) {
-            if (i == seatStatus.ava) {
-                console.log(i + "=" + seatStatus.ava)
+        for (const each of seatList) {
+            if (each.status == seatStatus.ava) {
+                console.log(each.status + "=" + seatStatus.ava)
                 cap++
             }
         }
@@ -149,16 +133,16 @@ export const SeatTable: React.FC = () => {
         }
 
         // get a shuffled seat list
-        const seatList = []
+        const seatIndex = []
         for (let i = 0; i < colCount * rowCount; i++) {
-            seatList.push(i)
+            seatIndex.push(i)
         }
-        const shuffledSeatList = seatList.sort(() => Math.random() - 0.5)
+        const shuffledSeatList = seatIndex.sort(() => Math.random() - 0.5)
 
         let i = 0
         for (const stu of students) console.log(stu)
         for (const randomIndex of shuffledSeatList) {
-            if (i < students.length && seatStatusList[randomIndex] === seatStatus.ava) {
+            if (i < students.length && seatList[randomIndex].status === seatStatus.ava) {
                 changeSeatStatus(randomIndex, seatStatus.occ, students[i])
                 console.log("set", randomIndex, "to", students[i])
                 i++
@@ -175,7 +159,7 @@ export const SeatTable: React.FC = () => {
         for (let i = 0; i < rowCount; i++) {
             seats.push([])
             for (let j = 0; j < colCount; j++) {
-                seats[i].push(seatNameList[i * colCount + j])
+                seats[i].push(seatList[i * colCount + j].name)
             }
         }
 
@@ -188,7 +172,7 @@ export const SeatTable: React.FC = () => {
         XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
 
         // Write the workbook to a binary string
-        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'binary' });
+        const wbout = XLSX.write(wb, {bookType: 'xlsx', type: 'binary'});
 
         const s2ab = (s: string) => {
             const buf = new ArrayBuffer(s.length);
@@ -200,21 +184,21 @@ export const SeatTable: React.FC = () => {
         };
 
         // Convert the binary string to a Blob
-        const blob = new Blob([s2ab(wbout)], { type: 'application/octet-stream' });
+        const blob = new Blob([s2ab(wbout)], {type: 'application/octet-stream'});
 
         // Save the Blob as a file
         saveAs(blob, '學生座位表.xlsx');
     }
 
-    const seat = []
-    for (let i = 0; i < colCount; i++) {
-        for (let j = 0; j < rowCount; j++) {
-            const cur = i * rowCount + j
-            seat.push(useMemo(() => <SeatButton key={String(cur)} id={cur} editor={changeSeatStatus}
-                                     status={seatStatusList[cur]}
-                                     name={seatNameList[cur]}></SeatButton>, [seatStatusList[cur], seatNameList[cur]]))
-        }
+    const ToggleStatus = (e: SyntheticEvent, index: number) => {
+        console.log("button", index, "clicked!")
+        e.preventDefault();
+        if (seatList[index].status === seatStatus.ava) changeSeatStatus(index, seatStatus.emp)
+        else if (seatList[index].status === seatStatus.emp) changeSeatStatus(index, seatStatus.ava)
     }
+
+
+
     return (
         <>
             <div className="mt-4 w-full px-6 flex flex-wrap">
@@ -230,22 +214,20 @@ export const SeatTable: React.FC = () => {
                         {/* Button */}
                         <div className="flex flex-row-reverse w-full px-3 text-right">
                             <button
-                                className="select-none h-11 px-4 ml-1 mb-0 font-bold text-center uppercase align-middle transition-all bg-transparent border border-solid rounded-lg shadow-none cursor-pointer leading-pro ease-soft-in text-xs duration-100 bg-150 active:opacity-85 hover:scale-102 tracking-tight-soft bg-x-25 border-opacity-0 hover:border-opacity-100 border-fuchsia-500 text-fuchsia-500"
+                                className="functionalButton"
                                 onClick={importExcel}>匯入學生
                             </button>
                             <button
-                                className="select-none h-11 px-4 mx-1 mb-0 font-bold text-center uppercase align-middle transition-all bg-transparent border border-solid rounded-lg shadow-none cursor-pointer leading-pro ease-soft-in text-xs duration-100 bg-150 active:opacity-85 hover:scale-102 tracking-tight-soft bg-x-25 border-opacity-0 hover:border-opacity-100 border-fuchsia-500 text-fuchsia-500"
-                                onClick={() => {
+                                className="functionalButton" onClick={() => {
                                     document.getElementById("openAskDialog").click()
                                 }}>生成座位
                             </button>
                             <button
-                                className="select-none h-11 px-4 mx-1 mb-0 font-bold text-center uppercase align-middle transition-all bg-transparent border border-solid rounded-lg shadow-none cursor-pointer leading-pro ease-soft-in text-xs duration-100 bg-150 active:opacity-85 hover:scale-102 tracking-tight-soft bg-x-25 border-opacity-0 hover:border-opacity-100 border-fuchsia-500 text-fuchsia-500 disabled:border-opacity-0 disabled:text-gray-700"
-                                onClick={clear} disabled={isEmpty()}>清空座位
+                                className="functionalButton" onClick={clear} disabled={seatList.filter((seat) => {return seat.status !== seatStatus.ava}).length == 0}>清空座位
                             </button>
                             <button id="secondGeneration" className="Hidden" onClick={resizeSeat}></button>
-                            <button onClick={exportExcel} disabled={isEmpty()}
-                                    className="select-none h-11 px-4 mx-1 mb-0 font-bold text-center uppercase align-middle transition-all bg-transparent border border-solid rounded-lg shadow-none cursor-pointer leading-pro ease-soft-in text-xs duration-100 bg-150 active:opacity-85 hover:scale-102 tracking-tight-soft bg-x-25 border-opacity-0 hover:border-opacity-100 border-fuchsia-500 text-fuchsia-500 disabled:border-opacity-0 disabled:text-gray-700">匯出座位
+                            <button onClick={exportExcel} disabled={seatList.filter((seat) => {return seat.status !== seatStatus.ava}).length == 0}
+                                    className="functionalButton">匯出座位
                             </button>
                         </div>
                     </div>
@@ -253,19 +235,23 @@ export const SeatTable: React.FC = () => {
                 <div
                     className={"bg-[#23283D] border-[#444B5F] border rounded-[16px] p-[24px] grid w-full " + gridClasses[colCount - 1]}
                     id="seat">
-                    {seat}
+                    {seatList.map((seat, i) => (
+                        <div draggable="true" onClick={(e:SyntheticEvent) => {ToggleStatus(e, i)}} id={String(i)} className= {`${seatList[i].status}`} onDragEnd={(e:SyntheticEvent) => {console.log("dragend", e)}}>
+                                {seat.name}
+                        </div>
+                    ))}
                 </div>
                 <StatusBar
-                    blueNum={seatStatusList.filter((x) => {
-                        return x == seatStatus.occ
+                    blueNum={seatList.filter((x) => {
+                        return x.status == seatStatus.occ
                     }).length}
-                    greenNum={seatStatusList.filter((x) => {
-                        return x == seatStatus.ava
+                    greenNum={seatList.filter((x) => {
+                        return x.status == seatStatus.ava
                     }).length}
-                    redNum={seatStatusList.filter((x) => {
-                        return x == seatStatus.emp}).length}
-                >
-                </StatusBar>
+                    redNum={seatList.filter((x) => {
+                        return x.status == seatStatus.emp
+                    }).length}
+                />
             </div>
         </>
     )
