@@ -22,7 +22,7 @@ const gridClasses = [
     "grid-cols-12"
 ];
 
-export default function SeatTable() {
+export const SeatTable: React.FC = () => {
     const [rowCount, setRowCount] = React.useState(6);
     const [colCount, setColCount] = React.useState(8);
     const [seatStatusList, setSeatStatusList] = React.useState(new Array(8 * 6).fill(seatStatus.ava));
@@ -48,29 +48,32 @@ export default function SeatTable() {
         setSeatStatusList(new Array(tc * tr).fill(seatStatus.ava))
     }
 
-    const changeSeatStatus = (i: number, status: seatStatus, text = "") => {
-        setSeatStatusList(seatStatusList.map((seatStatus, n) => {
+    const changeSeatStatus = (i: Readonly<number>, status: Readonly<seatStatus>, text = "") => {
+        setSeatStatusList(prevSeatStatusList => prevSeatStatusList.map((seatStatus, n) => {
             if (n === i) {
                 return status;
             } else {
                 return seatStatus;
             }
         }));
-        setSeatNameList(seatNameList.map((seatName, n) => {
+        setSeatNameList(prevSeatNameList => prevSeatNameList.map((seatName, n) => {
             if (n === i) {
                 if (status === seatStatus.ava) return "";
                 else if (status === seatStatus.emp) return "X";
-                else return text
+                else return text;
             } else {
-                return seatName
+                return seatName;
             }
         }));
-    }
+    };
 
     const clear = () => {
-        for (let i=0; i<seatStatusList.length; i++) {
-            changeSeatStatus(i, seatStatus.ava)
-        }
+        setSeatStatusList(seatStatusList.map(() => {
+                return seatStatus.ava;
+        }));
+        setSeatNameList(seatNameList.map(() => {
+                return ""
+        }));
     }
 
     React.useEffect(() => {

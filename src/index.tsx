@@ -1,4 +1,4 @@
-import SeatTable from "./Compontent/SeatTable"
+import {SeatTable} from "./Compontent/SeatTable"
 import {Button, Dialog, DialogPanel, DialogTitle, Transition, TransitionChild} from "@headlessui/react";
 import React, {useState} from "react";
 import * as appInfo from "../package.json"
