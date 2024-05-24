@@ -46,11 +46,6 @@ export class SeatButton extends Component<seatProps> {
         else if (this.props.status === seatStatus.emp) this.callParent(seatStatus.ava)
     }
 
-    shouldComponentUpdate(nextProps: Readonly<seatProps>): boolean {
-        return nextProps.status !== this.props.status || nextProps.name !== this.props.name;
-
-    }
-
     render() {
         console.log("rendering button", this.props.id)
         const draggable = this.props.draggable == "True" || this.props.draggable == "true"
