@@ -973,6 +973,10 @@ video {
   --tw-border-opacity: 0;
 }
 
+.border-opacity-50 {
+  --tw-border-opacity: 0.5;
+}
+
 .bg-\[\#141828\] {
   --tw-bg-opacity: 1;
   background-color: rgb(20 24 40 / var(--tw-bg-opacity));
@@ -1306,6 +1310,15 @@ video {
 
 .active\:opacity-85:active {
   opacity: 0.85;
+}
+
+.disabled\:border-0:disabled {
+  border-width: 0px;
+}
+
+.disabled\:text-gray-700:disabled {
+  --tw-text-opacity: 1;
+  color: rgb(55 65 81 / var(--tw-text-opacity));
 }
 
 @media (min-width: 640px) {

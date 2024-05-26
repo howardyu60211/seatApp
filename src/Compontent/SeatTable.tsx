@@ -46,7 +46,7 @@ export const SeatTable: React.FC = () => {
             return
         } else if (seatList.filter((seat) => {
             return seat.status !== seatStatus.ava
-        }).length !== 0 && !confirm("您有尚未儲存的座位表，是否重新生成座位?")) {
+        }).length !== 0) {
             return
         }
         setColCount(tc)
@@ -206,6 +206,7 @@ export const SeatTable: React.FC = () => {
         }));
         document.getElementById(String(targetID)).classList.remove("border-dashed")
         document.getElementById(String(targetID)).classList.remove("opacity-50")
+        document.getElementById(String(sourceID)).classList.remove("border-opacity-50")
     }
 
     const DragOverAnimation = (e: React.DragEvent<HTMLDivElement>, targetID: number) => {
@@ -221,6 +222,7 @@ export const SeatTable: React.FC = () => {
 
     const onDragStart = (e: React.DragEvent<HTMLDivElement>, targetID: number) => {
         e.dataTransfer.setData("sourceID", String(targetID))
+        document.getElementById(String(targetID)).classList.add("border-opacity-50")
     }
 
     return (
@@ -247,11 +249,11 @@ export const SeatTable: React.FC = () => {
                                 }}>生成座位
                             </button>
                             <button
-                                className="functionalButton" onClick={clear} disabled={seatList.filter((seat) => {return seat.status !== seatStatus.ava}).length == 0}>清空座位
+                                className="functionalButton disabled:border-0 disabled:text-gray-700" onClick={clear} disabled={seatList.filter((seat) => {return seat.status !== seatStatus.ava}).length == 0}>清空座位
                             </button>
                             <button id="secondGeneration" className="Hidden" onClick={resizeSeat}></button>
                             <button onClick={exportExcel} disabled={seatList.filter((seat) => {return seat.status !== seatStatus.ava}).length == 0}
-                                    className="functionalButton">匯出座位
+                                    className="functionalButton disabled:border-0 disabled:text-gray-700">匯出座位
                             </button>
                         </div>
                     </div>
