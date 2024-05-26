@@ -71,10 +71,6 @@ export const SeatTable: React.FC = () => {
         }));
     }
 
-    React.useEffect(() => {
-        console.log(seatList);
-    }, [seatList]);
-
     const importExcel = () => {
         const input = document.createElement('input');
         input.accept = '.xlsx'
@@ -197,7 +193,35 @@ export const SeatTable: React.FC = () => {
         else if (seatList[index].status === seatStatus.emp) changeSeatStatus(index, seatStatus.ava)
     }
 
+    const exchange = (sourceID: number, targetID: number) => {
+        const target = seatList[targetID];
+        const source = seatList[sourceID];
+        setSeatList(prevSeatList => prevSeatList.map((seat, n) => {
+            if (n === sourceID) {
+                return target
+            } else if (n === targetID) {
+                return source
+            }
+            return seat;
+        }));
+        document.getElementById(String(targetID)).classList.remove("border-dashed")
+        document.getElementById(String(targetID)).classList.remove("opacity-50")
+    }
 
+    const DragOverAnimation = (e: React.DragEvent<HTMLDivElement>, targetID: number) => {
+        e.preventDefault()
+        if (e._reactName == "onDragOver") {
+            document.getElementById(String(targetID)).classList.add("border-dashed")
+            document.getElementById(String(targetID)).classList.add("opacity-50")
+        } else {
+            document.getElementById(String(targetID)).classList.remove("border-dashed")
+            document.getElementById(String(targetID)).classList.remove("opacity-50")
+        }
+    }
+
+    const onDragStart = (e: React.DragEvent<HTMLDivElement>, targetID: number) => {
+        e.dataTransfer.setData("sourceID", String(targetID))
+    }
 
     return (
         <>
@@ -236,7 +260,12 @@ export const SeatTable: React.FC = () => {
                     className={"bg-[#23283D] border-[#444B5F] border rounded-[16px] p-[24px] grid w-full " + gridClasses[colCount - 1]}
                     id="seat">
                     {seatList.map((seat, i) => (
-                        <div draggable="true" onClick={(e:SyntheticEvent) => {ToggleStatus(e, i)}} id={String(i)} className= {`${seatList[i].status}`} onDragEnd={(e:SyntheticEvent) => {console.log("dragend", e)}}>
+                        <div draggable className={`${seatList[i].status}`}
+                             onClick={(e:SyntheticEvent) => {ToggleStatus(e, i)}} id={String(i)}
+                             onDragStart={(e) => {onDragStart(e, i)}}
+                             onDragOver={(e) => {DragOverAnimation(e, i)}}
+                             onDragLeave={(e) => {DragOverAnimation(e, i)}}
+                             onDrop={(e) => {exchange(parseInt(e.dataTransfer.getData("sourceID")), i)}}>
                                 {seat.name}
                         </div>
                     ))}

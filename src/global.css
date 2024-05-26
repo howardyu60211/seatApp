@@ -955,6 +955,10 @@ video {
   border-style: solid;
 }
 
+.border-dashed {
+  border-style: dashed;
+}
+
 .border-\[\#444B5F\] {
   --tw-border-opacity: 1;
   border-color: rgb(68 75 95 / var(--tw-border-opacity));
@@ -1176,6 +1180,10 @@ video {
 
 .opacity-100 {
   opacity: 1;
+}
+
+.opacity-50 {
+  opacity: 0.5;
 }
 
 .shadow-none {
