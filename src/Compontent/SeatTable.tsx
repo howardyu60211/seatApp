@@ -1,9 +1,5 @@
-import * as React from 'react'
-
-import * as XLSX from "xlsx";
-import {saveAs} from "file-saver";
+import {FC, DragEvent, useState, SyntheticEvent} from 'react'
 import StatusBar from "./seatBar";
-import {SyntheticEvent} from "react";
 
 const gridClasses = [
     "grid-cols-1",
@@ -27,10 +23,10 @@ export enum seatStatus {
 }
 
 /* TODO: Ask for unwanted dialog. */
-export const SeatTable: React.FC = () => {
-    const [rowCount, setRowCount] = React.useState(6);
-    const [colCount, setColCount] = React.useState(8);
-    const [seatList, setSeatList] = React.useState(
+export const SeatTable: FC = () => {
+    const [rowCount, setRowCount] = useState(6);
+    const [colCount, setColCount] = useState(8);
+    const [seatList, setSeatList] = useState(
         new Array(48).fill({status: seatStatus.ava, name: ""}));
 
     const resizeSeat = () => {
@@ -44,14 +40,11 @@ export const SeatTable: React.FC = () => {
         } else if (tr >= 30) {
             alert("輸入列數需小於30")
             return
-        } else if (seatList.filter((seat) => {
-            return seat.status !== seatStatus.ava
-        }).length !== 0) {
-            return
         }
         setColCount(tc)
         setRowCount(tr)
-        setSeatList(new Array(rowCount * colCount).fill({status: seatStatus.ava, name: ""}))
+        console.log(tc, tr)
+        setSeatList(new Array(tc * tr).fill({status: seatStatus.ava, name: ""}))
     }
 
     const changeSeatStatus = (i: Readonly<number>, status: Readonly<seatStatus>, text = "") => {
@@ -71,48 +64,20 @@ export const SeatTable: React.FC = () => {
         }));
     }
 
-    const importExcel = () => {
+    const inputFile = () => {
         const input = document.createElement('input');
         input.accept = '.xlsx'
         input.type = 'file'
         input.onchange = () => {
             const files = Array.from(input.files);
             if (files && files[0]) {
-                const file = files[0];
-                const reader = new FileReader();
-                reader.onload = (e: ProgressEvent<FileReader>) => {
-                    // Parse data
-                    const binaryStr = e.target?.result;
-                    const wb = XLSX.read(binaryStr, {type: 'binary'});
-
-                    // Get first worksheet
-                    const wsname = wb.SheetNames[0];
-                    const ws = wb.Sheets[wsname];
-
-                    // Convert array of arrays
-                    const data: [][] = XLSX.utils.sheet_to_json(ws, {header: 1});
-                    const flatdata: string[] = []
-
-                    for (const row of data) {
-                        let stu = ""
-                        for (const ele of row) {
-                            stu += ele
-                        }
-                        flatdata.push(stu)
-                    }
-
-                    // Update state
-                    console.log("data", data);
-                    phaseExcel(flatdata)
-                    // Here you can handle the JSON data further
-                };
-                reader.readAsBinaryString(file);
+                phaseExcel(files[0])
             }
         };
         input.click();
     }
 
-    const phaseExcel = (students: string[]) => {
+    const importData = (students: string[]) => {
         let cap = 0
         for (const each of seatList) {
             if (each.status == seatStatus.ava) {
@@ -140,11 +105,9 @@ export const SeatTable: React.FC = () => {
         for (const randomIndex of shuffledSeatList) {
             if (i < students.length && seatList[randomIndex].status === seatStatus.ava) {
                 changeSeatStatus(randomIndex, seatStatus.occ, students[i])
-                console.log("set", randomIndex, "to", students[i])
                 i++
             } else {
                 changeSeatStatus(randomIndex, seatStatus.emp)
-                console.log("set", randomIndex, "to empty")
             }
         }
 
@@ -161,29 +124,34 @@ export const SeatTable: React.FC = () => {
 
         console.log(seats)
 
-        const wb = XLSX.utils.book_new();
-        const ws = XLSX.utils.json_to_sheet(seats);
+        Promise.all([
+            import("xlsx"),
+            import("file-saver")
+        ]).then(([XLSX, fileSaver]) => {
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.json_to_sheet(seats);
 
-        // Append the worksheet to the workbook
-        XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+            // Append the worksheet to the workbook
+            XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
 
-        // Write the workbook to a binary string
-        const wbout = XLSX.write(wb, {bookType: 'xlsx', type: 'binary'});
+            // Write the workbook to a binary string
+            const wbout = XLSX.write(wb, {bookType: 'xlsx', type: 'binary'});
 
-        const s2ab = (s: string) => {
-            const buf = new ArrayBuffer(s.length);
-            const view = new Uint8Array(buf);
-            for (let i = 0; i < s.length; i++) {
-                view[i] = s.charCodeAt(i) & 0xFF;
+            const s2ab = (s: string) => {
+                const buf = new ArrayBuffer(s.length);
+                const view = new Uint8Array(buf);
+                for (let i = 0; i < s.length; i++) {
+                    view[i] = s.charCodeAt(i) & 0xFF;
+                }
+                return buf;
             }
-            return buf;
-        };
+            // Convert the binary string to a Blob
+            const blob = new Blob([s2ab(wbout)], {type: 'application/octet-stream'});
 
-        // Convert the binary string to a Blob
-        const blob = new Blob([s2ab(wbout)], {type: 'application/octet-stream'});
+            // Save the Blob as a file
+            fileSaver.saveAs(blob, '學生座位表.xlsx');
+        })
 
-        // Save the Blob as a file
-        saveAs(blob, '學生座位表.xlsx');
     }
 
     const ToggleStatus = (e: SyntheticEvent, index: number) => {
@@ -194,6 +162,7 @@ export const SeatTable: React.FC = () => {
     }
 
     const exchange = (sourceID: number, targetID: number) => {
+        if (isNaN(sourceID)) return
         const target = seatList[targetID];
         const source = seatList[sourceID];
         setSeatList(prevSeatList => prevSeatList.map((seat, n) => {
@@ -209,9 +178,41 @@ export const SeatTable: React.FC = () => {
         document.getElementById(String(sourceID)).classList.remove("border-opacity-50")
     }
 
-    const DragOverAnimation = (e: React.DragEvent<HTMLDivElement>, targetID: number) => {
+    const phaseExcel = (file: File) => {
+        const reader = new FileReader();
+        reader.onload = (e: ProgressEvent<FileReader>) => {
+            // Parse data
+            import("xlsx").then((XLSX) => {
+                const binaryStr = e.target?.result;
+                const wb = XLSX.read(binaryStr, {type: 'binary'});
+
+                // Get first worksheet
+                const wsname = wb.SheetNames[0];
+                const ws = wb.Sheets[wsname];
+
+                // Convert array of arrays
+                const data: [][] = XLSX.utils.sheet_to_json(ws, {header: 1});
+                const flatdata: string[] = []
+
+                for (const row of data) {
+                    let stu = ""
+                    for (const ele of row) {
+                        stu += ele
+                    }
+                    flatdata.push(stu)
+                }
+
+                // Update state
+                importData(flatdata)
+                // Here you can handle the JSON data further
+            })
+        };
+        reader.readAsBinaryString(file);
+    }
+
+    const DragOverAnimation = (e: DragEvent<HTMLDivElement>, targetID: number) => {
         e.preventDefault()
-        if (e._reactName == "onDragOver") {
+        if (e.nativeEvent.type == "dragover") {
             document.getElementById(String(targetID)).classList.add("border-dashed")
             document.getElementById(String(targetID)).classList.add("opacity-50")
         } else {
@@ -220,9 +221,32 @@ export const SeatTable: React.FC = () => {
         }
     }
 
-    const onDragStart = (e: React.DragEvent<HTMLDivElement>, targetID: number) => {
+    const onDragStart = (e: DragEvent<HTMLDivElement>, targetID: number) => {
         e.dataTransfer.setData("sourceID", String(targetID))
         document.getElementById(String(targetID)).classList.add("border-opacity-50")
+    }
+
+    const onDragEnd = (selfID: number) => {
+        document.getElementById(String(selfID)).classList.remove("border-opacity-50")
+    }
+
+    const dropFile = (e: DragEvent) => {
+        e.preventDefault()
+        try {
+            if (e.dataTransfer.files[0].path.split('.').pop() !== "xlsx") {
+                alert("僅支援xlsx檔!")
+                return
+            }
+            phaseExcel(e.dataTransfer.files[0])
+        } catch (error) {
+            console.log("this is not a file!")
+        }
+
+        console.log(e)
+        // if (document.getElementById(String(e.target.id)).classList !== null) {
+        //     document.getElementById(String(e.target.id)).classList.remove("border-dashed")
+        //     document.getElementById(String(e.target.id)).classList.remove("opacity-50")
+        // }
     }
 
     return (
@@ -241,7 +265,7 @@ export const SeatTable: React.FC = () => {
                         <div className="flex flex-row-reverse w-full px-3 text-right">
                             <button
                                 className="functionalButton"
-                                onClick={importExcel}>匯入學生
+                                onClick={inputFile}>匯入學生
                             </button>
                             <button
                                 className="functionalButton" onClick={() => {
@@ -258,15 +282,16 @@ export const SeatTable: React.FC = () => {
                         </div>
                     </div>
                 </div>
-                <div
+                <div onDrop={dropFile} onDragOver={(e) => {e.preventDefault()}}
                     className={"bg-[#23283D] border-[#444B5F] border rounded-[16px] p-[24px] grid w-full " + gridClasses[colCount - 1]}
-                    id="seat">
+                    >
                     {seatList.map((seat, i) => (
-                        <div draggable className={`${seatList[i].status}`}
+                        <div draggable className={`${seatList[i].status}`} key={String(i)}
                              onClick={(e:SyntheticEvent) => {ToggleStatus(e, i)}} id={String(i)}
                              onDragStart={(e) => {onDragStart(e, i)}}
                              onDragOver={(e) => {DragOverAnimation(e, i)}}
                              onDragLeave={(e) => {DragOverAnimation(e, i)}}
+                             onDragEnd={() => onDragEnd(i)}
                              onDrop={(e) => {exchange(parseInt(e.dataTransfer.getData("sourceID")), i)}}>
                                 {seat.name}
                         </div>

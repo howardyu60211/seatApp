@@ -7,10 +7,10 @@
   "scripts": {
     "start": "electron-forge start",
     "package": "electron-forge package",
-    "make": "electron-forge make",
     "publish": "electron-forge publish",
     "lint": "eslint --ext .ts,.tsx .",
-    "dist": "electron-builder --win --x64",
+    "make": "electron-forge make",
+    "dist": "electron-builder build --win portable",
     "tailwind": "npx tailwindcss -i src/input.css -o src/global.css"
   },
   "devDependencies": {
@@ -41,7 +41,7 @@
   },
   "keywords": [],
   "author": {
-    "name": "Howard",
+    "name": "Howard yu",
     "email": "howard60211@gmail.com"
   },
   "license": "MIT",

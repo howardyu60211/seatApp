@@ -93,3 +93,5 @@ out/
 
 #webstorm IDE config
 .idea/
+
+dist/
