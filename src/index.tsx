@@ -16,7 +16,7 @@ export default function Index() {
 
     function handleGeneration() {
         close()
-        document.getElementById("secondGeneration").click()
+        document.getElementById("secondGeneration")?.click()
     }
 
     return (

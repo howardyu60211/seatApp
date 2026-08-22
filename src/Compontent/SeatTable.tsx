@@ -69,7 +69,9 @@ export const SeatTable: FC = () => {
         input.accept = '.xlsx'
         input.type = 'file'
         input.onchange = () => {
+            if (!input.files) return;
             const files = Array.from(input.files);
+
             if (files && files[0]) {
                 phaseExcel(files[0])
             }
@@ -173,9 +175,8 @@ export const SeatTable: FC = () => {
             }
             return seat;
         }));
-        document.getElementById(String(targetID)).classList.remove("border-dashed")
-        document.getElementById(String(targetID)).classList.remove("opacity-50")
-        document.getElementById(String(sourceID)).classList.remove("border-opacity-50")
+        document.getElementById(String(targetID))?.classList.remove("border-dashed", "opacity-50")
+        document.getElementById(String(sourceID))?.classList.remove("border-opacity-50")
     }
 
     const phaseExcel = (file: File) => {
@@ -213,21 +214,19 @@ export const SeatTable: FC = () => {
     const DragOverAnimation = (e: DragEvent<HTMLDivElement>, targetID: number) => {
         e.preventDefault()
         if (e.nativeEvent.type == "dragover") {
-            document.getElementById(String(targetID)).classList.add("border-dashed")
-            document.getElementById(String(targetID)).classList.add("opacity-50")
+            document.getElementById(String(targetID))?.classList.add("border-dashed", "opacity-50")
         } else {
-            document.getElementById(String(targetID)).classList.remove("border-dashed")
-            document.getElementById(String(targetID)).classList.remove("opacity-50")
+            document.getElementById(String(targetID))?.classList.remove("border-dashed", "opacity-50")
         }
     }
 
     const onDragStart = (e: DragEvent<HTMLDivElement>, targetID: number) => {
         e.dataTransfer.setData("sourceID", String(targetID))
-        document.getElementById(String(targetID)).classList.add("border-opacity-50")
+        document.getElementById(String(targetID))?.classList.add("border-opacity-50")
     }
 
     const onDragEnd = (selfID: number) => {
-        document.getElementById(String(selfID)).classList.remove("border-opacity-50")
+        document.getElementById(String(selfID))?.classList.remove("border-opacity-50")
     }
 
     const dropFile = (e: DragEvent) => {
@@ -269,7 +268,7 @@ export const SeatTable: FC = () => {
                             </button>
                             <button
                                 className="functionalButton" onClick={() => {
-                                    document.getElementById("openAskDialog").click()
+                                    document.getElementById("openAskDialog")?.click()
                                 }}>生成座位
                             </button>
                             <button
