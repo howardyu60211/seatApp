@@ -193,15 +193,7 @@ export const SeatTable: FC = () => {
 
                 // Convert array of arrays
                 const data: [][] = XLSX.utils.sheet_to_json(ws, {header: 1});
-                const flatdata: string[] = []
-
-                for (const row of data) {
-                    let stu = ""
-                    for (const ele of row) {
-                        stu += ele
-                    }
-                    flatdata.push(stu)
-                }
+                const flatdata = data.map(row => row.join(" "))
 
                 // Update state
                 importData(flatdata)
