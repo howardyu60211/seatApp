@@ -1,3 +1,52 @@
+@import "tailwindcss";
+
+@layer components {
+    .ava {
+        @apply mx-1 my-1 h-8 px-2 py-2
+        font-bold text-center align-middle
+        transition-all bg-transparent
+        border-2 border-solid rounded-lg
+        shadow-none cursor-pointer text-xs
+        active:opacity-85 hover:opacity-75
+        border-green-400 text-green-400;
+    }
+
+    .emp {
+        @apply mx-1 my-1 h-8 px-2 py-2
+        font-bold text-center align-middle
+        transition-all bg-transparent
+        border-2 border-solid rounded-lg
+        shadow-none cursor-pointer text-xs
+        active:opacity-85 hover:opacity-75
+        border-red-400 text-red-400;
+    }
+
+    .occ {
+        @apply mx-1 my-1 h-8 px-2 py-2
+        font-bold text-center align-middle
+        transition-all bg-transparent
+        border-2 border-solid rounded-lg
+        shadow-none cursor-pointer text-xs
+        active:opacity-85 hover:opacity-75
+        border-blue-400 text-blue-400;
+    }
+
+    .functionalButton {
+        @apply select-none h-11 px-4 ml-1 mb-0
+        font-bold text-center uppercase align-middle
+        transition-all bg-transparent
+        border border-solid rounded-lg
+        shadow-none cursor-pointer text-xs
+        duration-100 active:opacity-85
+        border-transparent hover:border-fuchsia-500
+        text-fuchsia-500;
+    }
+}
+
+.border-status-dim {
+    border-color: color-mix(in srgb, currentColor 50%, transparent);
+}
+
 .titleBar {
     -webkit-app-region: drag;
 }
@@ -7,7 +56,7 @@
 }
 
 .font-sans {
-    font-family: Open Sans;
+    font-family: "Open Sans";
 }
 
 .text-xxs {

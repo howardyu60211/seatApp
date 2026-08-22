@@ -176,7 +176,7 @@ export const SeatTable: FC = () => {
             return seat;
         }));
         document.getElementById(String(targetID))?.classList.remove("border-dashed", "opacity-50")
-        document.getElementById(String(sourceID))?.classList.remove("border-opacity-50")
+        document.getElementById(String(sourceID))?.classList.remove("border-status-dim")
     }
 
     const phaseExcel = (file: File) => {
@@ -214,11 +214,11 @@ export const SeatTable: FC = () => {
 
     const onDragStart = (e: DragEvent<HTMLDivElement>, targetID: number) => {
         e.dataTransfer.setData("sourceID", String(targetID))
-        document.getElementById(String(targetID))?.classList.add("border-opacity-50")
+        document.getElementById(String(targetID))?.classList.add("border-status-dim")
     }
 
     const onDragEnd = (selfID: number) => {
-        document.getElementById(String(selfID))?.classList.remove("border-opacity-50")
+        document.getElementById(String(selfID))?.classList.remove("border-status-dim")
     }
 
     const dropFile = (e: DragEvent) => {
@@ -264,11 +264,11 @@ export const SeatTable: FC = () => {
                                 }}>生成座位
                             </button>
                             <button
-                                className="functionalButton disabled:border-0 disabled:text-gray-700" onClick={clear} disabled={seatList.filter((seat) => {return seat.status !== seatStatus.ava}).length == 0}>清空座位
+                                className="functionalButton disabled:border-transparent disabled:text-gray-700" onClick={clear} disabled={seatList.filter((seat) => {return seat.status !== seatStatus.ava}).length == 0}>清空座位
                             </button>
                             <button id="secondGeneration" className="Hidden" onClick={resizeSeat}></button>
                             <button onClick={exportExcel} disabled={seatList.filter((seat) => {return seat.status !== seatStatus.ava}).length == 0}
-                                    className="functionalButton disabled:border-0 disabled:text-gray-700">匯出座位
+                                    className="functionalButton disabled:border-transparent disabled:text-gray-700">匯出座位
                             </button>
                         </div>
                     </div>
