@@ -233,12 +233,12 @@ export const SeatTable: FC = () => {
     const dropFile = (e: DragEvent) => {
         e.preventDefault()
         try {
-            if (e.dataTransfer.files[0].path.split('.').pop() !== "xlsx") {
+            if (!e.dataTransfer.files[0].name.toLowerCase().endsWith('.xlsx')) {
                 alert("僅支援xlsx檔!")
                 return
             }
             phaseExcel(e.dataTransfer.files[0])
-        } catch (error) {
+        } catch {
             console.log("this is not a file!")
         }
 
