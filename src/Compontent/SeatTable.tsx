@@ -1369,7 +1369,7 @@ export const SeatTable = () => {
               type="button"
               onClick={applyArrangement}
               disabled={isArrangeBlocked}
-              className="functionalButton basicButtonAnimation shrink-0 border-fuchsia-400 disabled:border-transparent"
+              className="functionalButton basicButtonAnimation shrink-0 border-fuchsia-400 hover:bg-fuchsia-400/10 disabled:border-[#596178] disabled:text-[#6F778A]"
             >
               {arrangeMode === "random" ? "再抽一次" : "套用排序"}
             </button>
