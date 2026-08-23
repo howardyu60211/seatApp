@@ -22,6 +22,11 @@
         @apply border-blue-400 text-blue-400;
     }
 
+    .seatPinMark {
+        @apply pointer-events-none mr-1 inline-block
+        size-3 align-[-2px] text-fuchsia-400;
+    }
+
     .seatIndex {
         @apply mx-1 my-1 flex h-8 items-center justify-center
         select-none text-[11px] font-bold text-[#7F8798];
@@ -52,6 +57,24 @@
 
     .formHint {
         @apply mt-1 block;
+    }
+}
+
+.seatSettling {
+    animation: seatSettle 260ms ease-out backwards;
+}
+
+@keyframes seatSettle {
+    0% {
+        transform: scale(0.82);
+        opacity: 0;
+    }
+    60% {
+        transform: scale(1.08);
+        opacity: 1;
+    }
+    100% {
+        transform: scale(1);
     }
 }
 

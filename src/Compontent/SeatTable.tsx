@@ -9,6 +9,7 @@ import {
   Fragment,
   useCallback,
   useEffect,
+  useRef,
   useState,
   type DragEvent,
   type MouseEvent,
@@ -26,6 +27,7 @@ export enum seatStatus {
 interface Seat {
   status: seatStatus;
   name: string;
+  pinned: boolean;
 }
 
 interface SeatLayout {
@@ -50,8 +52,11 @@ interface SeatMenuState {
   y: number;
 }
 
-type StoredSeatHistoryEntry = Omit<SeatHistoryEntry, "name"> & {
+type StoredSeat = Omit<Seat, "pinned"> & { pinned?: unknown };
+
+type StoredSeatHistoryEntry = Omit<SeatHistoryEntry, "name" | "seats"> & {
   name?: unknown;
+  seats: StoredSeat[];
 };
 
 type ImportFormatMode = "join-row" | "selected-columns";
@@ -73,24 +78,38 @@ const HISTORY_STORAGE_KEY = "seatapp.favorite-seat-layouts.v1";
 const SEAT_MENU_WIDTH = 168;
 const SEAT_MENU_ITEM_HEIGHT = 34;
 const SEAT_MENU_PADDING = 8;
+const MAX_RESHUFFLE_ATTEMPT = 8;
+const SEAT_SETTLE_STEP = 40;
+const SEAT_SETTLE_MAX_DELAY = 700;
+const SEAT_SETTLE_DURATION = 260;
 
-const createSeat = (status = seatStatus.ava, name = ""): Seat => ({
+const createSeat = (
+  status = seatStatus.ava,
+  name = "",
+  pinned = false,
+): Seat => ({
   status,
   name: status === seatStatus.emp ? "X" : name,
+  // 只有已分配的座位能被釘選，避免狀態與釘選互相矛盾。
+  pinned: status === seatStatus.occ && pinned,
 });
 
 const createSeatList = (count: number) =>
   Array.from({ length: count }, () => createSeat());
 
-const isSeat = (value: unknown): value is Seat => {
+const isStoredSeat = (value: unknown): value is StoredSeat => {
   if (!value || typeof value !== "object") return false;
 
-  const seat = value as Partial<Seat>;
+  const seat = value as Partial<StoredSeat>;
   return (
     typeof seat.name === "string" &&
-    Object.values(seatStatus).includes(seat.status as seatStatus)
+    Object.values(seatStatus).includes(seat.status as seatStatus) &&
+    (seat.pinned === undefined || typeof seat.pinned === "boolean")
   );
 };
+
+const normalizeStoredSeat = (seat: StoredSeat): Seat =>
+  createSeat(seat.status, seat.name, seat.pinned === true);
 
 const loadSeatHistory = (): SeatHistoryEntry[] => {
   try {
@@ -119,11 +138,12 @@ const loadSeatHistory = (): SeatHistoryEntry[] => {
           colCount <= MAX_COL_COUNT &&
           Array.isArray(seats) &&
           seats.length === rowCount * colCount &&
-          seats.every(isSeat)
+          seats.every(isStoredSeat)
         );
       })
       .map((entry) => ({
         ...entry,
+        seats: entry.seats.map(normalizeStoredSeat),
         name:
           typeof entry.name === "string" && entry.name.trim()
             ? entry.name.trim()
@@ -188,6 +208,17 @@ const shuffle = <T,>(values: T[]) => {
   return values;
 };
 
+const PinIcon = () => (
+  <svg
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    aria-hidden="true"
+    className="seatPinMark"
+  >
+    <path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" />
+  </svg>
+);
+
 export const SeatTable = () => {
   const [initialSeatHistory] = useState(loadSeatHistory);
   const [initialSeatLayout] = useState<SeatLayout>(() =>
@@ -234,6 +265,9 @@ export const SeatTable = () => {
   const [exportFormat, setExportFormat] = useState<ExportFormat>("xlsx");
   const [seatMenu, setSeatMenu] = useState<SeatMenuState | null>(null);
   const [renameSeatIndex, setRenameSeatIndex] = useState<number | null>(null);
+  const [settleDelays, setSettleDelays] = useState<Record<number, number>>({});
+  const [settleRun, setSettleRun] = useState(0);
+  const settleTimerRef = useRef<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
   const formatImportedRow = (row: unknown[]) => {
@@ -507,11 +541,12 @@ export const SeatTable = () => {
     i: Readonly<number>,
     status: Readonly<seatStatus>,
     text = "",
+    pinned = false,
   ) => {
     if (!seatList[i]) return;
 
     const nextSeats = [...seatList];
-    nextSeats[i] = createSeat(status, text);
+    nextSeats[i] = createSeat(status, text, pinned);
     applySeatLayout(rowCount, colCount, nextSeats);
   };
 
@@ -566,6 +601,105 @@ export const SeatTable = () => {
     }
 
     applySeatLayout(rowCount, colCount, nextSeats);
+  };
+
+  const clearSettleTimer = useCallback(() => {
+    if (settleTimerRef.current === null) return;
+
+    window.clearTimeout(settleTimerRef.current);
+    settleTimerRef.current = null;
+  }, []);
+
+  useEffect(() => clearSettleTimer, [clearSettleTimer]);
+
+  const reshuffleSeats = () => {
+    const movableStudents: string[] = [];
+    const targetIndexes: number[] = [];
+
+    seatList.forEach((seat, seatIndex) => {
+      if (seat.status === seatStatus.occ) {
+        if (seat.pinned) return;
+        movableStudents.push(seat.name);
+        targetIndexes.push(seatIndex);
+      } else if (seat.status === seatStatus.ava) {
+        targetIndexes.push(seatIndex);
+      }
+    });
+
+    if (movableStudents.length === 0) {
+      alert("目前沒有可重抽的學生，請先匯入學生或取消釘選座位。");
+      return;
+    }
+
+    if (targetIndexes.length < 2) {
+      alert("可重抽的座位不足，至少需要兩個未釘選的座位。");
+      return;
+    }
+
+    // 以空字串補滿其餘可分配座位，讓學生能被隨機抽到任何一個未釘選的位置。
+    const blanks = Array.from(
+      { length: targetIndexes.length - movableStudents.length },
+      () => "",
+    );
+    const previousNames = targetIndexes.map(
+      (seatIndex) => seatList[seatIndex].name,
+    );
+
+    let nextNames = shuffle([...movableStudents, ...blanks]);
+    for (
+      let attempt = 0;
+      attempt < MAX_RESHUFFLE_ATTEMPT &&
+      nextNames.every((name, position) => name === previousNames[position]);
+      attempt++
+    ) {
+      nextNames = shuffle([...movableStudents, ...blanks]);
+    }
+
+    const nextSeats = [...seatList];
+    targetIndexes.forEach((seatIndex, position) => {
+      const name = nextNames[position];
+      nextSeats[seatIndex] = name
+        ? createSeat(seatStatus.occ, name)
+        : createSeat(seatStatus.ava);
+    });
+
+    const pinnedCount = seatList.reduce(
+      (count, seat) =>
+        count + Number(seat.status === seatStatus.occ && seat.pinned),
+      0,
+    );
+
+    applySeatLayout(rowCount, colCount, nextSeats);
+    showOperationNotice(
+      pinnedCount > 0
+        ? `已再抽一次，保留 ${pinnedCount} 個釘選座位`
+        : "已再抽一次",
+    );
+
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    // 抽到學生的座位依序彈跳，delay 讓整批座位形成波浪效果。
+    const step = Math.min(
+      SEAT_SETTLE_STEP,
+      SEAT_SETTLE_MAX_DELAY / Math.max(targetIndexes.length - 1, 1),
+    );
+    const nextSettleDelays: Record<number, number> = {};
+    let lastDelay = 0;
+
+    targetIndexes.forEach((seatIndex, position) => {
+      if (!nextNames[position]) return;
+
+      lastDelay = Math.round(position * step);
+      nextSettleDelays[seatIndex] = lastDelay;
+    });
+
+    clearSettleTimer();
+    setSettleRun((previousRun) => previousRun + 1);
+    setSettleDelays(nextSettleDelays);
+    settleTimerRef.current = window.setTimeout(() => {
+      settleTimerRef.current = null;
+      setSettleDelays({});
+    }, lastDelay + SEAT_SETTLE_DURATION + 80);
   };
 
   const exportExcel = async () => {
@@ -662,7 +796,12 @@ export const SeatTable = () => {
     const seat = seatList[seatIndex];
     if (!seat) return;
 
-    const itemCount = seat.status === seatStatus.emp ? 1 : 2;
+    const itemCount =
+      seat.status === seatStatus.emp
+        ? 1
+        : seat.status === seatStatus.occ
+          ? 3
+          : 2;
     const menuHeight = itemCount * SEAT_MENU_ITEM_HEIGHT + SEAT_MENU_PADDING;
     setSeatMenu({
       index: seatIndex,
@@ -694,6 +833,7 @@ export const SeatTable = () => {
       renameSeatIndex,
       name ? seatStatus.occ : seatStatus.ava,
       name,
+      seatList[renameSeatIndex].pinned,
     );
     setRenameSeatIndex(null);
     showOperationNotice(name ? `已改為「${name}」` : "已清空座位文字");
@@ -708,6 +848,17 @@ export const SeatTable = () => {
 
     changeSeatStatus(seatIndex, seatStatus.ava);
     showOperationNotice(`已刪除「${seat.name}」`);
+  };
+
+  const toggleSeatPin = (seatIndex: number) => {
+    const seat = seatList[seatIndex];
+    if (!seat || seat.status !== seatStatus.occ) return;
+
+    closeSeatMenu();
+    changeSeatStatus(seatIndex, seatStatus.occ, seat.name, !seat.pinned);
+    showOperationNotice(
+      seat.pinned ? `已取消釘選「${seat.name}」` : `已釘選「${seat.name}」`,
+    );
   };
 
   const toggleSeatStatusFromMenu = (seatIndex: number) => {
@@ -820,6 +971,13 @@ export const SeatTable = () => {
     },
   );
   const hasSeatChanges = seatCounts[seatStatus.ava] !== seatList.length;
+  const pinnedSeatCount = seatList.reduce(
+    (count, seat) =>
+      count + Number(seat.status === seatStatus.occ && seat.pinned),
+    0,
+  );
+  const movableStudentCount = seatCounts[seatStatus.occ] - pinnedSeatCount;
+
   const seatMenuTarget = seatMenu ? seatList[seatMenu.index] : undefined;
   const renameSeatLabel =
     renameSeatIndex === null
@@ -840,7 +998,7 @@ export const SeatTable = () => {
                 學生座位預覽
               </p>
               <p className="select-none text-[#ACB4C0] font-normal text-[14px] leading-[130%]">
-                在此修改並匯出學生座位。左鍵切換座位狀態，右鍵可修改文字或刪除學生。
+                在此修改並匯出學生座位。左鍵切換座位狀態，右鍵可修改文字、釘選或刪除學生。
               </p>
             </div>
 
@@ -869,6 +1027,34 @@ export const SeatTable = () => {
             </div>
           </div>
         </div>
+
+        <section
+          aria-label="座位排序"
+          className="mb-3 w-full rounded-[14px] border border-[#444B5F] bg-[#1C2133] p-4"
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="select-none text-[14px] font-medium leading-[130%] text-[#EDF0F4]">
+                座位排序
+              </p>
+              <p className="mt-1.5 hintText">
+                再抽一次會把未釘選的學生重新隨機分配；已釘選（名字前有圖釘）的座位會留在原位。
+              </p>
+              <p className="mt-1 hintText">
+                可重抽 {movableStudentCount} 人 · 已釘選 {pinnedSeatCount} 個座位
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={reshuffleSeats}
+              disabled={movableStudentCount === 0}
+              className="functionalButton basicButtonAnimation shrink-0 border-fuchsia-400"
+            >
+              再抽一次
+            </button>
+          </div>
+        </section>
 
         <section
           aria-label="座位收藏與紀錄"
@@ -972,11 +1158,26 @@ export const SeatTable = () => {
                 .slice(row * colCount, row * colCount + colCount)
                 .map((seat, col) => {
                   const i = row * colCount + col;
+                  const settleDelay = settleDelays[i];
                   return (
                     <div
                       draggable
-                      className={seat.status + " basicSeat"}
-                      key={String(i)}
+                      className={
+                        seat.status +
+                        " basicSeat" +
+                        (settleDelay === undefined ? "" : " seatSettling")
+                      }
+                      style={
+                        settleDelay === undefined
+                          ? undefined
+                          : { animationDelay: `${settleDelay}ms` }
+                      }
+                      title={seat.pinned ? "已釘選，再抽一次時不會移動" : undefined}
+                      key={
+                        settleDelay === undefined
+                          ? String(i)
+                          : `${i}-settle-${settleRun}`
+                      }
                       onClick={() => toggleSeatStatus(i)}
                       onContextMenu={(event) => openSeatMenu(event, i)}
                       onDragStart={(event) => handleSeatDragStart(event, i)}
@@ -994,6 +1195,7 @@ export const SeatTable = () => {
                       }
                       onDrop={(event) => handleSeatDrop(event, i)}
                     >
+                      {seat.pinned && <PinIcon />}
                       {seat.name}
                     </div>
                   );
@@ -1535,14 +1737,24 @@ export const SeatTable = () => {
                 修改文字
               </button>
               {seatMenuTarget.status === seatStatus.occ ? (
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="seatMenuItem text-red-300 hover:text-red-200"
-                  onClick={() => removeSeatStudent(seatMenu.index)}
-                >
-                  刪除學生
-                </button>
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="seatMenuItem"
+                    onClick={() => toggleSeatPin(seatMenu.index)}
+                  >
+                    {seatMenuTarget.pinned ? "取消釘選" : "釘選座位"}
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className="seatMenuItem text-red-300 hover:text-red-200"
+                    onClick={() => removeSeatStudent(seatMenu.index)}
+                  >
+                    刪除學生
+                  </button>
+                </>
               ) : (
                 <button
                   type="button"
