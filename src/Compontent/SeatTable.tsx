@@ -12,10 +12,7 @@ import {
   type DragEvent,
   type SubmitEvent,
 } from "react";
-import {
-  exportSeatLayoutAsPdf,
-  exportSeatLayoutAsPng,
-} from "./seatExport";
+import { exportSeatLayoutAsPdf, exportSeatLayoutAsPng } from "./seatExport";
 import StatusBar from "./seatBar";
 
 export enum seatStatus {
@@ -50,6 +47,13 @@ type StoredSeatHistoryEntry = Omit<SeatHistoryEntry, "name"> & {
 };
 
 type ImportFormatMode = "join-row" | "selected-columns";
+type ExportFormat = "xlsx" | "pdf" | "png";
+
+const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
+  xlsx: "XLSX",
+  pdf: "PDF",
+  png: "PNG",
+};
 
 const DEFAULT_ROW_COUNT = 6;
 const DEFAULT_COL_COUNT = 8;
@@ -219,6 +223,9 @@ export const SeatTable = () => {
   const [skipFirstRow, setSkipFirstRow] = useState(false);
   const [exportTitle, setExportTitle] = useState("學生座位表");
   const [showExportPodium, setShowExportPodium] = useState(false);
+  const [isImportSettingsOpen, setIsImportSettingsOpen] = useState(false);
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("xlsx");
 
   const formatImportedRow = (row: unknown[]) => {
     const cells =
@@ -241,8 +248,7 @@ export const SeatTable = () => {
         ? `${importSeparator.length} 個空白`
         : `「${importSeparator}」`;
   const importPreview =
-    formatImportedRow(["A01", "王小明", "三年甲班"]) ||
-    "（空白，不會匯入）";
+    formatImportedRow(["A01", "王小明", "三年甲班"]) || "（空白，不會匯入）";
 
   const showOperationNotice = useCallback((message: string) => {
     setOperationNotice({ message });
@@ -356,12 +362,7 @@ export const SeatTable = () => {
     const name = favoriteName.trim();
     if (!name) return;
 
-    const historyEntry = createHistoryEntry(
-      name,
-      rowCount,
-      colCount,
-      seatList,
-    );
+    const historyEntry = createHistoryEntry(name, rowCount, colCount, seatList);
     setSeatHistory((previousHistory) => {
       const nextHistory = [historyEntry, ...previousHistory].slice(
         0,
@@ -459,11 +460,7 @@ export const SeatTable = () => {
   };
 
   const clear = () => {
-    applySeatLayout(
-      rowCount,
-      colCount,
-      createSeatList(seatList.length),
-    );
+    applySeatLayout(rowCount, colCount, createSeatList(seatList.length));
   };
 
   const inputFile = () => {
@@ -475,6 +472,11 @@ export const SeatTable = () => {
       if (file) parseExcel(file);
     };
     input.click();
+  };
+
+  const confirmImport = () => {
+    setIsImportSettingsOpen(false);
+    inputFile();
   };
 
   const importData = (students: string[]) => {
@@ -565,6 +567,18 @@ export const SeatTable = () => {
     }
   };
 
+  const confirmExport = () => {
+    setIsExportDialogOpen(false);
+
+    if (exportFormat === "xlsx") {
+      void exportExcel();
+    } else if (exportFormat === "pdf") {
+      void exportPdf();
+    } else if (exportFormat === "png") {
+      void exportImage();
+    }
+  };
+
   const toggleSeatStatus = (index: number) => {
     if (seatList[index].status === seatStatus.ava)
       changeSeatStatus(index, seatStatus.emp);
@@ -612,9 +626,7 @@ export const SeatTable = () => {
           { header: 1 },
         );
         const rowsToImport = skipFirstRow ? rows.slice(1) : rows;
-        const students = rowsToImport
-          .map(formatImportedRow)
-          .filter(Boolean);
+        const students = rowsToImport.map(formatImportedRow).filter(Boolean);
 
         if (students.length === 0) {
           alert("Excel 檔案中沒有學生資料。");
@@ -698,13 +710,13 @@ export const SeatTable = () => {
 
             {/* Button */}
             <div className="flex w-full flex-row-reverse flex-wrap px-3 text-right">
-              <button className="functionalButton" onClick={inputFile}>
-                匯入學生
-              </button>
               <button
                 className="functionalButton"
-                onClick={openResizeDialog}
+                onClick={() => setIsImportSettingsOpen(true)}
               >
+                匯入學生
+              </button>
+              <button className="functionalButton" onClick={openResizeDialog}>
                 生成座位
               </button>
               <button
@@ -715,25 +727,11 @@ export const SeatTable = () => {
                 清空座位
               </button>
               <button
-                onClick={exportExcel}
+                onClick={() => setIsExportDialogOpen(true)}
                 disabled={!hasSeatChanges}
                 className="functionalButton disabled:border-transparent disabled:text-gray-700"
               >
-                匯出 XLSX
-              </button>
-              <button
-                onClick={exportPdf}
-                disabled={!hasSeatChanges}
-                className="functionalButton disabled:border-transparent disabled:text-gray-700"
-              >
-                匯出 PDF
-              </button>
-              <button
-                onClick={exportImage}
-                disabled={!hasSeatChanges}
-                className="functionalButton disabled:border-transparent disabled:text-gray-700"
-              >
-                匯出 PNG
+                匯出座位表
               </button>
             </div>
           </div>
@@ -780,168 +778,6 @@ export const SeatTable = () => {
             </button>
           </div>
         </section>
-
-        <details className="group mb-3 w-full overflow-hidden rounded-[14px] border border-[#444B5F] bg-[#1C2133]">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 select-none [&::-webkit-details-marker]:hidden">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold tracking-[0.16em] text-fuchsia-400 uppercase">
-                匯出設定
-              </p>
-              <p className="mt-1 truncate text-sm text-[#ACB4C0]">
-                {exportTitle.trim() || "學生座位表"} ·
-                {showExportPodium ? " 顯示講臺" : " 不顯示講臺"}
-              </p>
-            </div>
-            <span
-              aria-hidden="true"
-              className="text-lg text-fuchsia-400 transition-transform duration-200 group-open:rotate-180"
-            >
-              ⌄
-            </span>
-          </summary>
-
-          <div className="grid grid-cols-1 gap-4 border-t border-[#444B5F] px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
-                匯出標題
-              </span>
-              <input
-                type="text"
-                value={exportTitle}
-                maxLength={40}
-                onChange={(event) => setExportTitle(event.target.value)}
-                placeholder="學生座位表"
-                className="block w-full rounded-lg border border-[#596178] bg-[#23283D] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
-              />
-              <span className="mt-1 block text-[11px] text-[#7F8798]">
-                套用至 PNG 與 PDF；留空時使用「學生座位表」。
-              </span>
-            </label>
-
-            <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#444B5F] bg-[#23283D]/70 px-3 py-2.5">
-              <input
-                type="checkbox"
-                checked={showExportPodium}
-                onChange={(event) => setShowExportPodium(event.target.checked)}
-                className="size-4 accent-fuchsia-500"
-              />
-              <span>
-                <span className="block text-sm text-[#EDF0F4]">列印講臺</span>
-                <span className="block text-[11px] text-[#7F8798]">
-                  顯示在座位表上方。
-                </span>
-              </span>
-            </label>
-          </div>
-        </details>
-
-        <details className="group mb-3 w-full overflow-hidden rounded-[14px] border border-[#444B5F] bg-[#1C2133]">
-          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 select-none [&::-webkit-details-marker]:hidden">
-            <div className="min-w-0">
-              <p className="text-[11px] font-bold tracking-[0.16em] text-fuchsia-400 uppercase">
-                XLSX 匯入格式
-              </p>
-              <p className="mt-1 truncate text-sm text-[#ACB4C0]">
-                {importFormatMode === "join-row"
-                  ? `合併整列 · ${separatorDescription}`
-                  : `組合欄位 ${importColumns || "—"} · ${separatorDescription}`}
-                {skipFirstRow ? " · 略過標題列" : ""}
-              </p>
-            </div>
-            <span
-              aria-hidden="true"
-              className="text-lg text-fuchsia-400 transition-transform duration-200 group-open:rotate-180"
-            >
-              ⌄
-            </span>
-          </summary>
-
-          <div className="grid grid-cols-1 gap-4 border-t border-[#444B5F] px-4 py-4 sm:grid-cols-3">
-            <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
-                資料列輸出方式
-              </span>
-              <select
-                value={importFormatMode}
-                onChange={(event) =>
-                  setImportFormatMode(event.target.value as ImportFormatMode)
-                }
-                className="block w-full rounded-lg border border-[#596178] bg-[#23283D] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
-              >
-                <option value="join-row">合併整列</option>
-                <option value="selected-columns">組合指定欄位</option>
-              </select>
-            </label>
-
-            {importFormatMode === "selected-columns" && (
-              <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
-                  選取欄位與順序
-                </span>
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={importColumns}
-                  onChange={(event) => setImportColumns(event.target.value)}
-                  placeholder="例如：1,2,4"
-                  className="block w-full rounded-lg border border-[#596178] bg-[#23283D] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
-                />
-                <span className="mt-1 block text-[11px] text-[#7F8798]">
-                  以逗號分隔；Excel 的 A 欄是第 1 欄。
-                </span>
-              </label>
-            )}
-
-            <label
-              className={
-                importFormatMode === "join-row"
-                  ? "block sm:col-span-2"
-                  : "block"
-              }
-            >
-              <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
-                欄位分隔字元
-              </span>
-              <input
-                type="text"
-                value={importSeparator}
-                maxLength={12}
-                onChange={(event) => setImportSeparator(event.target.value)}
-                placeholder="留空代表直接相接"
-                className="block w-full rounded-lg border border-[#596178] bg-[#23283D] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
-              />
-              <span className="mt-1 block text-[11px] text-[#7F8798]">
-                目前：{separatorDescription}
-              </span>
-            </label>
-
-            <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#444B5F] bg-[#23283D]/70 px-3 py-2.5 sm:col-span-3">
-              <input
-                type="checkbox"
-                checked={skipFirstRow}
-                onChange={(event) => setSkipFirstRow(event.target.checked)}
-                className="size-4 accent-fuchsia-500"
-              />
-              <span>
-                <span className="block text-sm text-[#EDF0F4]">
-                  略過第一列
-                </span>
-                <span className="block text-[11px] text-[#7F8798]">
-                  Excel 第一列是姓名、班級等欄位標題時啟用。
-                </span>
-              </span>
-            </label>
-
-            <div className="flex items-center justify-between gap-4 rounded-lg border border-fuchsia-400/20 bg-fuchsia-400/5 px-3 py-2.5 sm:col-span-3">
-              <span className="text-xs font-medium text-fuchsia-300">
-                範例：A01、王小明、三年甲班
-              </span>
-              <code className="truncate text-right text-sm text-[#EDF0F4]">
-                {importPreview}
-              </code>
-            </div>
-          </div>
-        </details>
 
         <div
           onDrop={dropFile}
@@ -1064,6 +900,273 @@ export const SeatTable = () => {
         </Dialog>
       </Transition>
 
+      <Transition show={isImportSettingsOpen}>
+        <Dialog
+          as="div"
+          className="relative z-10 focus:outline-none"
+          onClose={() => setIsImportSettingsOpen(false)}
+        >
+          <div className="fixed inset-0 z-10 w-screen overflow-y-auto bg-black/30">
+            <div className="flex min-h-full items-center justify-center p-4">
+              <TransitionChild
+                enter="ease-out duration-200"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-150"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <DialogPanel className="w-full max-w-2xl rounded-xl bg-[#23283D] p-6 shadow-xl">
+                  <DialogTitle
+                    as="h3"
+                    className="text-base font-medium text-[#EDF0F4]"
+                  >
+                    匯入學生設定
+                  </DialogTitle>
+                  <p className="mt-1 text-xs text-[#ACB4C0]">
+                    設定 XLSX 資料的組合方式，再選擇要匯入的檔案。
+                  </p>
+
+                  <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                        資料列輸出方式
+                      </span>
+                      <select
+                        value={importFormatMode}
+                        onChange={(event) =>
+                          setImportFormatMode(
+                            event.target.value as ImportFormatMode,
+                          )
+                        }
+                        className="block w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+                      >
+                        <option value="join-row">合併整列</option>
+                        <option value="selected-columns">組合指定欄位</option>
+                      </select>
+                    </label>
+
+                    {importFormatMode === "selected-columns" && (
+                      <label className="block">
+                        <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                          選取欄位與順序
+                        </span>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={importColumns}
+                          onChange={(event) =>
+                            setImportColumns(event.target.value)
+                          }
+                          placeholder="例如：1,2,4"
+                          className="block w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+                        />
+                        <span className="mt-1 block text-[11px] text-[#7F8798]">
+                          Excel 的 A 欄是第 1 欄。
+                        </span>
+                      </label>
+                    )}
+
+                    <label
+                      className={
+                        importFormatMode === "join-row"
+                          ? "block sm:col-span-2"
+                          : "block"
+                      }
+                    >
+                      <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                        欄位分隔字元
+                      </span>
+                      <input
+                        type="text"
+                        value={importSeparator}
+                        maxLength={12}
+                        onChange={(event) =>
+                          setImportSeparator(event.target.value)
+                        }
+                        placeholder="留空代表直接相接"
+                        className="block w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+                      />
+                      <span className="mt-1 block text-[11px] text-[#7F8798]">
+                        目前：{separatorDescription}
+                      </span>
+                    </label>
+
+                    <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#444B5F] bg-[#1C2133] px-3 py-2.5 sm:col-span-3">
+                      <input
+                        type="checkbox"
+                        checked={skipFirstRow}
+                        onChange={(event) =>
+                          setSkipFirstRow(event.target.checked)
+                        }
+                        className="size-4 accent-fuchsia-500"
+                      />
+                      <span>
+                        <span className="block text-sm text-[#EDF0F4]">
+                          略過第一列
+                        </span>
+                        <span className="block text-[11px] text-[#7F8798]">
+                          Excel 第一列是姓名、班級等欄位標題時啟用。
+                        </span>
+                      </span>
+                    </label>
+
+                    <div className="flex items-center justify-between gap-4 rounded-lg border border-fuchsia-400/20 bg-fuchsia-400/5 px-3 py-2.5 sm:col-span-3">
+                      <span className="text-xs font-medium text-fuchsia-300">
+                        範例：A01、王小明、三年甲班
+                      </span>
+                      <code className="truncate text-right text-sm text-[#EDF0F4]">
+                        {importPreview}
+                      </code>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsImportSettingsOpen(false)}
+                      className="rounded-lg px-3 py-2 text-xs font-bold text-[#ACB4C0] transition hover:bg-white/5 hover:text-[#EDF0F4]"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="button"
+                      onClick={confirmImport}
+                      className="rounded-lg border border-fuchsia-400 bg-fuchsia-400/10 px-3 py-2 text-xs font-bold text-fuchsia-300 transition hover:bg-fuchsia-400/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-400"
+                    >
+                      選擇 XLSX 檔案
+                    </button>
+                  </div>
+                </DialogPanel>
+              </TransitionChild>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
+
+      <Transition show={isExportDialogOpen}>
+        <Dialog
+          as="div"
+          className="relative z-10 focus:outline-none"
+          onClose={() => setIsExportDialogOpen(false)}
+        >
+          <div className="fixed inset-0 z-10 w-screen overflow-y-auto bg-black/30">
+            <div className="flex min-h-full items-center justify-center p-4">
+              <TransitionChild
+                enter="ease-out duration-200"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-150"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <DialogPanel className="w-full max-w-md rounded-xl bg-[#23283D] p-6 shadow-xl">
+                  <DialogTitle
+                    as="h3"
+                    className="text-base font-medium text-[#EDF0F4]"
+                  >
+                    匯出座位表
+                  </DialogTitle>
+
+                  <fieldset className="mt-5">
+                    <legend className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                      匯出格式
+                    </legend>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(
+                        Object.keys(EXPORT_FORMAT_LABELS) as ExportFormat[]
+                      ).map((format) => (
+                        <label
+                          key={format}
+                          className={`cursor-pointer rounded-lg border px-3 py-2 text-center text-sm font-bold transition ${
+                            exportFormat === format
+                              ? "border-fuchsia-400 bg-fuchsia-400/10 text-fuchsia-300"
+                              : "border-[#596178] bg-[#1C2133] text-[#ACB4C0] hover:border-fuchsia-400/50 hover:text-[#EDF0F4]"
+                          }`}
+                        >
+                          <input
+                            type="radio"
+                            name="exportFormat"
+                            value={format}
+                            checked={exportFormat === format}
+                            onChange={() => setExportFormat(format)}
+                            className="sr-only"
+                          />
+                          {EXPORT_FORMAT_LABELS[format]}
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+
+                  {exportFormat === "xlsx" ? (
+                    <p className="mt-4 text-sm leading-6 text-[#ACB4C0]">
+                      將依目前的座位列與欄輸出 XLSX 檔案。
+                    </p>
+                  ) : (
+                    <div className="mt-4 space-y-4">
+                      <label className="block">
+                        <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                          匯出標題
+                        </span>
+                        <input
+                          type="text"
+                          value={exportTitle}
+                          maxLength={40}
+                          onChange={(event) =>
+                            setExportTitle(event.target.value)
+                          }
+                          placeholder="學生座位表"
+                          className="block w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+                        />
+                        <span className="mt-1 block text-[11px] text-[#7F8798]">
+                          留空時使用「學生座位表」。
+                        </span>
+                      </label>
+
+                      <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#444B5F] bg-[#1C2133] px-3 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={showExportPodium}
+                          onChange={(event) =>
+                            setShowExportPodium(event.target.checked)
+                          }
+                          className="size-4 accent-fuchsia-500"
+                        />
+                        <span>
+                          <span className="block text-sm text-[#EDF0F4]">
+                            列印講臺
+                          </span>
+                          <span className="block text-[11px] text-[#7F8798]">
+                            顯示在座位表上方。
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+                  )}
+
+                  <div className="mt-6 flex justify-end gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsExportDialogOpen(false)}
+                      className="rounded-lg px-3 py-2 text-xs font-bold text-[#ACB4C0] transition hover:bg-white/5 hover:text-[#EDF0F4]"
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="button"
+                      onClick={confirmExport}
+                      className="rounded-lg border border-fuchsia-400 bg-fuchsia-400/10 px-3 py-2 text-xs font-bold text-fuchsia-300 transition hover:bg-fuchsia-400/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-400"
+                    >
+                      確認匯出
+                    </button>
+                  </div>
+                </DialogPanel>
+              </TransitionChild>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
+
       <Transition show={isHistoryOpen}>
         <Dialog
           as="div"
@@ -1130,9 +1233,7 @@ export const SeatTable = () => {
                       <div className="mt-4 flex justify-end gap-2">
                         <button
                           type="button"
-                          onClick={() =>
-                            setIsDeleteAllHistoryConfirming(false)
-                          }
+                          onClick={() => setIsDeleteAllHistoryConfirming(false)}
                           className="rounded-lg px-3 py-2 text-xs font-bold text-[#ACB4C0] transition hover:bg-white/5 hover:text-[#EDF0F4]"
                         >
                           取消
@@ -1171,17 +1272,16 @@ export const SeatTable = () => {
                               <p className="mt-1 text-xs text-[#7F8798]">
                                 {new Date(
                                   historyEntry.createdAt,
-                                ).toLocaleString("zh-TW")} · {historyEntry.rowCount}
-                                列 × {historyEntry.colCount} 欄 · 已分配 {occupiedCount}
-                                人
+                                ).toLocaleString("zh-TW")}{" "}
+                                · {historyEntry.rowCount}列 ×{" "}
+                                {historyEntry.colCount} 欄 · 已分配{" "}
+                                {occupiedCount}人
                               </p>
                             </div>
                             <div className="flex shrink-0 gap-2">
                               <button
                                 type="button"
-                                onClick={() =>
-                                  deleteSeatHistory(historyEntry)
-                                }
+                                onClick={() => deleteSeatHistory(historyEntry)}
                                 className="rounded-lg border border-red-400/70 px-3 py-2 text-xs font-bold text-red-400 transition hover:bg-red-400/10 active:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400"
                               >
                                 刪除
