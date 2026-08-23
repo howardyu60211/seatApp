@@ -5,7 +5,7 @@ import {
   Transition,
   TransitionChild,
 } from "@headlessui/react";
-import { DragEvent, FormEvent, useState } from "react";
+import { useState, type DragEvent, type SubmitEvent } from "react";
 import StatusBar from "./seatBar";
 
 export enum seatStatus {
@@ -60,7 +60,7 @@ export const SeatTable = () => {
     setIsResizeOpen(true);
   };
 
-  const resizeSeat = (event: FormEvent<HTMLFormElement>) => {
+  const resizeSeat = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const nextColCount = Number(requestedColCount);
     const nextRowCount = Number(requestedRowCount);
