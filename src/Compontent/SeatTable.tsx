@@ -12,6 +12,10 @@ import {
   type DragEvent,
   type SubmitEvent,
 } from "react";
+import {
+  exportSeatLayoutAsPdf,
+  exportSeatLayoutAsPng,
+} from "./seatExport";
 import StatusBar from "./seatBar";
 
 export enum seatStatus {
@@ -213,6 +217,8 @@ export const SeatTable = () => {
   const [importSeparator, setImportSeparator] = useState(" ");
   const [importColumns, setImportColumns] = useState("1,2");
   const [skipFirstRow, setSkipFirstRow] = useState(false);
+  const [exportTitle, setExportTitle] = useState("學生座位表");
+  const [showExportPodium, setShowExportPodium] = useState(false);
 
   const formatImportedRow = (row: unknown[]) => {
     const cells =
@@ -535,6 +541,30 @@ export const SeatTable = () => {
     }
   };
 
+  const exportImage = async () => {
+    try {
+      await exportSeatLayoutAsPng(
+        { rowCount, colCount, seats: seatList },
+        { title: exportTitle, showPodium: showExportPodium },
+      );
+      showOperationNotice("已匯出 PNG 圖片");
+    } catch {
+      alert("匯出 PNG 圖片失敗，請稍後再試。");
+    }
+  };
+
+  const exportPdf = async () => {
+    try {
+      await exportSeatLayoutAsPdf(
+        { rowCount, colCount, seats: seatList },
+        { title: exportTitle, showPodium: showExportPodium },
+      );
+      showOperationNotice("已匯出 PDF");
+    } catch {
+      alert("匯出 PDF 失敗，請稍後再試。");
+    }
+  };
+
   const toggleSeatStatus = (index: number) => {
     if (seatList[index].status === seatStatus.ava)
       changeSeatStatus(index, seatStatus.emp);
@@ -667,7 +697,7 @@ export const SeatTable = () => {
             </div>
 
             {/* Button */}
-            <div className="flex flex-row-reverse w-full px-3 text-right">
+            <div className="flex w-full flex-row-reverse flex-wrap px-3 text-right">
               <button className="functionalButton" onClick={inputFile}>
                 匯入學生
               </button>
@@ -689,7 +719,21 @@ export const SeatTable = () => {
                 disabled={!hasSeatChanges}
                 className="functionalButton disabled:border-transparent disabled:text-gray-700"
               >
-                匯出座位
+                匯出 XLSX
+              </button>
+              <button
+                onClick={exportPdf}
+                disabled={!hasSeatChanges}
+                className="functionalButton disabled:border-transparent disabled:text-gray-700"
+              >
+                匯出 PDF
+              </button>
+              <button
+                onClick={exportImage}
+                disabled={!hasSeatChanges}
+                className="functionalButton disabled:border-transparent disabled:text-gray-700"
+              >
+                匯出 PNG
               </button>
             </div>
           </div>
@@ -736,6 +780,60 @@ export const SeatTable = () => {
             </button>
           </div>
         </section>
+
+        <details className="group mb-3 w-full overflow-hidden rounded-[14px] border border-[#444B5F] bg-[#1C2133]">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 select-none [&::-webkit-details-marker]:hidden">
+            <div className="min-w-0">
+              <p className="text-[11px] font-bold tracking-[0.16em] text-fuchsia-400 uppercase">
+                匯出設定
+              </p>
+              <p className="mt-1 truncate text-sm text-[#ACB4C0]">
+                {exportTitle.trim() || "學生座位表"} ·
+                {showExportPodium ? " 顯示講臺" : " 不顯示講臺"}
+              </p>
+            </div>
+            <span
+              aria-hidden="true"
+              className="text-lg text-fuchsia-400 transition-transform duration-200 group-open:rotate-180"
+            >
+              ⌄
+            </span>
+          </summary>
+
+          <div className="grid grid-cols-1 gap-4 border-t border-[#444B5F] px-4 py-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                匯出標題
+              </span>
+              <input
+                type="text"
+                value={exportTitle}
+                maxLength={40}
+                onChange={(event) => setExportTitle(event.target.value)}
+                placeholder="學生座位表"
+                className="block w-full rounded-lg border border-[#596178] bg-[#23283D] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+              />
+              <span className="mt-1 block text-[11px] text-[#7F8798]">
+                套用至 PNG 與 PDF；留空時使用「學生座位表」。
+              </span>
+            </label>
+
+            <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#444B5F] bg-[#23283D]/70 px-3 py-2.5">
+              <input
+                type="checkbox"
+                checked={showExportPodium}
+                onChange={(event) => setShowExportPodium(event.target.checked)}
+                className="size-4 accent-fuchsia-500"
+              />
+              <span>
+                <span className="block text-sm text-[#EDF0F4]">列印講臺</span>
+                <span className="block text-[11px] text-[#7F8798]">
+                  顯示在座位表上方。
+                </span>
+              </span>
+            </label>
+          </div>
+        </details>
 
         <details className="group mb-3 w-full overflow-hidden rounded-[14px] border border-[#444B5F] bg-[#1C2133]">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-4 px-4 py-3 select-none [&::-webkit-details-marker]:hidden">
