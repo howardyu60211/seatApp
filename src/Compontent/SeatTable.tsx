@@ -6,10 +6,12 @@ import {
   TransitionChild,
 } from "@headlessui/react";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useState,
   type DragEvent,
+  type MouseEvent,
   type SubmitEvent,
 } from "react";
 import { exportSeatLayoutAsPdf, exportSeatLayoutAsPng } from "./seatExport";
@@ -42,6 +44,12 @@ interface OperationNotice {
   message: string;
 }
 
+interface SeatMenuState {
+  index: number;
+  x: number;
+  y: number;
+}
+
 type StoredSeatHistoryEntry = Omit<SeatHistoryEntry, "name"> & {
   name?: unknown;
 };
@@ -62,6 +70,9 @@ const MAX_COL_COUNT = 11;
 const MAX_HISTORY_COUNT = 30;
 const MAX_UNDO_COUNT = 50;
 const HISTORY_STORAGE_KEY = "seatapp.favorite-seat-layouts.v1";
+const SEAT_MENU_WIDTH = 168;
+const SEAT_MENU_ITEM_HEIGHT = 34;
+const SEAT_MENU_PADDING = 8;
 
 const createSeat = (status = seatStatus.ava, name = ""): Seat => ({
   status,
@@ -216,9 +227,14 @@ export const SeatTable = () => {
   const [skipFirstRow, setSkipFirstRow] = useState(false);
   const [exportTitle, setExportTitle] = useState("學生座位表");
   const [showExportPodium, setShowExportPodium] = useState(false);
+  const [showExportIndex, setShowExportIndex] = useState(true);
+  const [mirrorExportIndex, setMirrorExportIndex] = useState(false);
   const [isImportSettingsOpen, setIsImportSettingsOpen] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<ExportFormat>("xlsx");
+  const [seatMenu, setSeatMenu] = useState<SeatMenuState | null>(null);
+  const [renameSeatIndex, setRenameSeatIndex] = useState<number | null>(null);
+  const [renameValue, setRenameValue] = useState("");
 
   const formatImportedRow = (row: unknown[]) => {
     const cells =
@@ -350,6 +366,24 @@ export const SeatTable = () => {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [redoSeatLayout, redoStack.length, undoSeatLayout, undoStack.length]);
 
+  useEffect(() => {
+    if (!seatMenu) return;
+
+    const closeMenu = () => setSeatMenu(null);
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeMenu();
+    };
+
+    window.addEventListener("pointerdown", closeMenu);
+    window.addEventListener("resize", closeMenu);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("pointerdown", closeMenu);
+      window.removeEventListener("resize", closeMenu);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [seatMenu]);
+
   const saveSeatLayout = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     const name = favoriteName.trim();
@@ -411,25 +445,24 @@ export const SeatTable = () => {
     ]);
   };
 
-  const removeRow = () => {
-    if (rowCount <= 1) return;
+  const removeRowAt = (row: Readonly<number>) => {
+    if (rowCount <= 1 || row < 0 || row >= rowCount) return;
 
-    const lastRowSeats = seatList.slice((rowCount - 1) * colCount);
-    const hasAssignedSeat = lastRowSeats.some(
+    const targetRowSeats = seatList.slice(row * colCount, (row + 1) * colCount);
+    const hasAssignedSeat = targetRowSeats.some(
       (seat) => seat.status === seatStatus.occ,
     );
     if (
       hasAssignedSeat &&
-      !confirm("最後一列內有已分配學生的座位，確定要移除嗎？")
+      !confirm(`第 ${row + 1} 列內有已分配學生的座位，確定要移除嗎？`)
     ) {
       return;
     }
 
-    applySeatLayout(
-      rowCount - 1,
-      colCount,
-      seatList.slice(0, (rowCount - 1) * colCount),
-    );
+    applySeatLayout(rowCount - 1, colCount, [
+      ...seatList.slice(0, row * colCount),
+      ...seatList.slice((row + 1) * colCount),
+    ]);
   };
 
   const addColumn = () => {
@@ -443,28 +476,29 @@ export const SeatTable = () => {
     applySeatLayout(rowCount, colCount + 1, nextSeats);
   };
 
-  const removeColumn = () => {
-    if (colCount <= 1) return;
+  const removeColumnAt = (column: Readonly<number>) => {
+    if (colCount <= 1 || column < 0 || column >= colCount) return;
 
-    const lastColumnSeats = Array.from(
+    const targetColumnSeats = Array.from(
       { length: rowCount },
-      (_, row) => seatList[row * colCount + colCount - 1],
+      (_, row) => seatList[row * colCount + column],
     );
-    const hasAssignedSeat = lastColumnSeats.some(
+    const hasAssignedSeat = targetColumnSeats.some(
       (seat) => seat.status === seatStatus.occ,
     );
     if (
       hasAssignedSeat &&
-      !confirm("最後一欄內有已分配學生的座位，確定要移除嗎？")
+      !confirm(`第 ${column + 1} 欄內有已分配學生的座位，確定要移除嗎？`)
     ) {
       return;
     }
 
     const nextSeats: Seat[] = [];
     for (let row = 0; row < rowCount; row++) {
-      nextSeats.push(
-        ...seatList.slice(row * colCount, row * colCount + colCount - 1),
-      );
+      for (let col = 0; col < colCount; col++) {
+        if (col === column) continue;
+        nextSeats.push(seatList[row * colCount + col]);
+      }
     }
     applySeatLayout(rowCount, colCount - 1, nextSeats);
   };
@@ -569,7 +603,12 @@ export const SeatTable = () => {
     try {
       await exportSeatLayoutAsPng(
         { rowCount, colCount, seats: seatList },
-        { title: exportTitle, showPodium: showExportPodium },
+        {
+          title: exportTitle,
+          showPodium: showExportPodium,
+          showIndex: showExportIndex,
+          mirrorIndex: showExportIndex && mirrorExportIndex,
+        },
       );
       showOperationNotice("已匯出 PNG 圖片");
     } catch {
@@ -581,7 +620,12 @@ export const SeatTable = () => {
     try {
       await exportSeatLayoutAsPdf(
         { rowCount, colCount, seats: seatList },
-        { title: exportTitle, showPodium: showExportPodium },
+        {
+          title: exportTitle,
+          showPodium: showExportPodium,
+          showIndex: showExportIndex,
+          mirrorIndex: showExportIndex && mirrorExportIndex,
+        },
       );
       showOperationNotice("已匯出 PDF");
     } catch {
@@ -606,6 +650,69 @@ export const SeatTable = () => {
       changeSeatStatus(index, seatStatus.emp);
     else if (seatList[index].status === seatStatus.emp)
       changeSeatStatus(index, seatStatus.ava);
+  };
+
+  const closeSeatMenu = () => setSeatMenu(null);
+
+  const openSeatMenu = (
+    event: MouseEvent<HTMLDivElement>,
+    seatIndex: number,
+  ) => {
+    event.preventDefault();
+    const seat = seatList[seatIndex];
+    if (!seat) return;
+
+    const itemCount = seat.status === seatStatus.emp ? 1 : 2;
+    const menuHeight = itemCount * SEAT_MENU_ITEM_HEIGHT + SEAT_MENU_PADDING;
+    setSeatMenu({
+      index: seatIndex,
+      x: Math.max(
+        8,
+        Math.min(event.clientX, window.innerWidth - SEAT_MENU_WIDTH - 8),
+      ),
+      y: Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8)),
+    });
+  };
+
+  const openSeatRename = (seatIndex: number) => {
+    const seat = seatList[seatIndex];
+    if (!seat || seat.status === seatStatus.emp) return;
+
+    closeSeatMenu();
+    setRenameSeatIndex(seatIndex);
+    setRenameValue(seat.name);
+  };
+
+  const closeSeatRename = () => setRenameSeatIndex(null);
+
+  const submitSeatRename = (event: SubmitEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (renameSeatIndex === null) return;
+
+    const name = renameValue.trim();
+    changeSeatStatus(
+      renameSeatIndex,
+      name ? seatStatus.occ : seatStatus.ava,
+      name,
+    );
+    setRenameSeatIndex(null);
+    showOperationNotice(name ? `已改為「${name}」` : "已清空座位文字");
+  };
+
+  const removeSeatStudent = (seatIndex: number) => {
+    const seat = seatList[seatIndex];
+    if (!seat || seat.status !== seatStatus.occ) return;
+
+    closeSeatMenu();
+    if (!confirm(`確定要刪除「${seat.name}」嗎？`)) return;
+
+    changeSeatStatus(seatIndex, seatStatus.ava);
+    showOperationNotice(`已刪除「${seat.name}」`);
+  };
+
+  const toggleSeatStatusFromMenu = (seatIndex: number) => {
+    closeSeatMenu();
+    toggleSeatStatus(seatIndex);
   };
 
   const exchange = (sourceID: number, targetID: number) => {
@@ -713,6 +820,13 @@ export const SeatTable = () => {
     },
   );
   const hasSeatChanges = seatCounts[seatStatus.ava] !== seatList.length;
+  const seatMenuTarget = seatMenu ? seatList[seatMenu.index] : undefined;
+  const renameSeatLabel =
+    renameSeatIndex === null
+      ? ""
+      : `第 ${Math.floor(renameSeatIndex / colCount) + 1} 列第 ${
+          (renameSeatIndex % colCount) + 1
+        } 欄`;
 
   return (
     <>
@@ -726,7 +840,7 @@ export const SeatTable = () => {
                 學生座位預覽
               </p>
               <p className="select-none text-[#ACB4C0] font-normal text-[14px] leading-[130%]">
-                在此修改並匯出學生座位。
+                在此修改並匯出學生座位。左鍵切換座位狀態，右鍵可修改文字或刪除學生。
               </p>
             </div>
 
@@ -798,92 +912,137 @@ export const SeatTable = () => {
           </div>
         </section>
 
-        <div className="flex w-full items-stretch gap-2">
+        <div
+          onDrop={dropFile}
+          onDragOver={(e) => {
+            e.preventDefault();
+          }}
+          className={
+            "bg-[#23283D] border-[#444B5F] border rounded-[16px] p-[24px] grid w-full "
+          }
+          style={{
+            gridTemplateColumns: `auto auto repeat(${colCount}, minmax(0, 1fr)) auto`,
+          }}
+        >
+          <div />
+          <div />
           <div
-            onDrop={dropFile}
-            onDragOver={(e) => {
-              e.preventDefault();
-            }}
-            className={
-              "bg-[#23283D] border-[#444B5F] border rounded-[16px] p-[24px] grid flex-1 "
-            }
-            style={{
-              gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))`,
-            }}
+            className="mb-3 flex justify-center"
+            style={{ gridColumn: `span ${colCount}` }}
           >
-            {seatList.map((seat, i) => (
-              <div
-                draggable
-                className={seat.status + " basicSeat"}
-                key={String(i)}
-                onClick={() => toggleSeatStatus(i)}
-                onDragStart={(event) => handleSeatDragStart(event, i)}
-                onDragOver={handleSeatDragOver}
-                onDragLeave={(event) =>
-                  event.currentTarget.classList.remove(
-                    "border-dashed",
-                    "opacity-50",
-                  )
-                }
-                onDragEnd={(event) =>
-                  event.currentTarget.classList.remove("border-status-dim")
-                }
-                onDrop={(event) => handleSeatDrop(event, i)}
-              >
-                {seat.name}
-              </div>
-            ))}
+            <div className="w-[45%] min-w-[140px] select-none rounded-lg border-2 border-fuchsia-400 bg-[#141828] py-1.5 text-center text-xs font-bold text-fuchsia-300">
+              講臺
+            </div>
           </div>
+          <div />
 
-          <div className="flex shrink-0 flex-col items-center justify-center gap-1.5">
+          <div />
+          <div className="flex items-center justify-center">
+            <button
+              type="button"
+              onClick={addRow}
+              disabled={rowCount >= MAX_ROW_COUNT}
+              title="新增一列"
+              aria-label="新增一列"
+              className="h-7 px-1.5 text-[11px] functionalButton basicButtonAnimation"
+            >
+              ＋
+            </button>
+          </div>
+          {Array.from({ length: colCount + 1 }, (_, i) => (
+            <div key={`top-${i}`} />
+          ))}
+
+          {Array.from({ length: rowCount }, (_, row) => (
+            <Fragment key={`row-${row}`}>
+              <div className="flex items-center justify-center">
+                <button
+                  type="button"
+                  onClick={() => removeRowAt(row)}
+                  disabled={rowCount <= 1}
+                  title={`移除第 ${row + 1} 列`}
+                  aria-label={`移除第 ${row + 1} 列`}
+                  className="h-7 px-1.5 text-[11px] functionalButton basicButtonAnimation"
+                >
+                  －
+                </button>
+              </div>
+              <div className="seatIndex">{row + 1}</div>
+              {seatList
+                .slice(row * colCount, row * colCount + colCount)
+                .map((seat, col) => {
+                  const i = row * colCount + col;
+                  return (
+                    <div
+                      draggable
+                      className={seat.status + " basicSeat"}
+                      key={String(i)}
+                      onClick={() => toggleSeatStatus(i)}
+                      onContextMenu={(event) => openSeatMenu(event, i)}
+                      onDragStart={(event) => handleSeatDragStart(event, i)}
+                      onDragOver={handleSeatDragOver}
+                      onDragLeave={(event) =>
+                        event.currentTarget.classList.remove(
+                          "border-dashed",
+                          "opacity-50",
+                        )
+                      }
+                      onDragEnd={(event) =>
+                        event.currentTarget.classList.remove(
+                          "border-status-dim",
+                        )
+                      }
+                      onDrop={(event) => handleSeatDrop(event, i)}
+                    >
+                      {seat.name}
+                    </div>
+                  );
+                })}
+              <div />
+            </Fragment>
+          ))}
+
+          <div />
+          <div />
+          {Array.from({ length: colCount }, (_, col) => (
+            <div key={`colIndex-${col}`} className="seatIndex">
+              {col + 1}
+            </div>
+          ))}
+          <div className="flex items-center justify-center">
             <button
               type="button"
               onClick={addColumn}
               disabled={colCount >= MAX_COL_COUNT}
               title="新增一欄"
               aria-label="新增一欄"
-              className="flex size-8 items-center justify-center text-sm functionalButton basicButtonAnimation"
+              className="h-7 px-1.5 text-[11px] functionalButton basicButtonAnimation"
             >
-              +
-            </button>
-            <span className="select-none text-[11px] text-[#7F8798]">欄</span>
-            <button
-              type="button"
-              onClick={removeColumn}
-              disabled={colCount <= 1}
-              title="移除最後一欄"
-              aria-label="移除最後一欄"
-              className="flex size-8 items-center justify-center text-sm functionalButton basicButtonAnimation"
-            >
-              −
+              ＋
             </button>
           </div>
-        </div>
 
-        <div className="mt-2 flex w-full items-center justify-center gap-1.5">
-          <button
-            type="button"
-            onClick={addRow}
-            disabled={rowCount >= MAX_ROW_COUNT}
-            title="新增一列"
-            aria-label="新增一列"
-            className="flex size-8 items-center justify-center text-sm functionalButton basicButtonAnimation"
-          >
-            +
-          </button>
-          <span className="select-none text-[11px] text-[#7F8798]">列</span>
-          <button
-            type="button"
-            onClick={removeRow}
-            disabled={rowCount <= 1}
-            title="移除最後一列"
-            aria-label="移除最後一列"
-            className="flex size-8 items-center justify-center text-sm functionalButton basicButtonAnimation"
-          >
-            −
-          </button>
+          <div />
+          <div />
+          {Array.from({ length: colCount }, (_, col) => (
+            <div
+              key={`colRemove-${col}`}
+              className="flex items-center justify-center"
+            >
+              <button
+                type="button"
+                onClick={() => removeColumnAt(col)}
+                disabled={colCount <= 1}
+                title={`移除第 ${col + 1} 欄`}
+                aria-label={`移除第 ${col + 1} 欄`}
+                className="h-7 px-1.5 text-[11px] functionalButton basicButtonAnimation"
+              >
+                －
+              </button>
+            </div>
+          ))}
+          <div />
         </div>
-
         <StatusBar
           occupiedCount={seatCounts[seatStatus.occ]}
           availableCount={seatCounts[seatStatus.ava]}
@@ -952,7 +1111,7 @@ export const SeatTable = () => {
                           placeholder="例如：1,2,4"
                           className="block w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
                         />
-                        <span className="mt-1 block text-[11px] text-[#7F8798]">
+                        <span className="formHint hintText">
                           Excel 的 A 欄是第 1 欄。
                         </span>
                       </label>
@@ -978,7 +1137,7 @@ export const SeatTable = () => {
                         placeholder="留空代表直接相接"
                         className="block w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
                       />
-                      <span className="mt-1 block text-[11px] text-[#7F8798]">
+                      <span className="formHint hintText">
                         目前：{separatorDescription}
                       </span>
                     </label>
@@ -996,7 +1155,7 @@ export const SeatTable = () => {
                         <span className="block text-sm text-[#EDF0F4]">
                           略過第一列
                         </span>
-                        <span className="block text-[11px] text-[#7F8798]">
+                        <span className="block hintText">
                           Excel 第一列是姓名、班級等欄位標題時啟用。
                         </span>
                       </span>
@@ -1109,7 +1268,7 @@ export const SeatTable = () => {
                           placeholder="學生座位表"
                           className="block w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
                         />
-                        <span className="mt-1 block text-[11px] text-[#7F8798]">
+                        <span className="formHint hintText">
                           留空時使用「學生座位表」。
                         </span>
                       </label>
@@ -1127,8 +1286,54 @@ export const SeatTable = () => {
                           <span className="block text-sm text-[#EDF0F4]">
                             列印講臺
                           </span>
-                          <span className="block text-[11px] text-[#7F8798]">
+                          <span className="block hintText">
                             顯示在座位表上方。
+                          </span>
+                        </span>
+                      </label>
+
+                      <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#444B5F] bg-[#1C2133] px-3 py-2.5">
+                        <input
+                          type="checkbox"
+                          checked={showExportIndex}
+                          onChange={(event) =>
+                            setShowExportIndex(event.target.checked)
+                          }
+                          className="size-4 accent-fuchsia-500"
+                        />
+                        <span>
+                          <span className="block text-sm text-[#EDF0F4]">
+                            顯示列欄編號
+                          </span>
+                          <span className="block hintText">
+                            列號在左側、欄號在下方。
+                          </span>
+                        </span>
+                      </label>
+
+                      <label
+                        className={
+                          "flex items-center gap-3 rounded-lg border border-[#444B5F] bg-[#1C2133] px-3 py-2.5 " +
+                          (showExportIndex
+                            ? "cursor-pointer"
+                            : "cursor-not-allowed opacity-50")
+                        }
+                      >
+                        <input
+                          type="checkbox"
+                          checked={mirrorExportIndex}
+                          disabled={!showExportIndex}
+                          onChange={(event) =>
+                            setMirrorExportIndex(event.target.checked)
+                          }
+                          className="size-4 accent-fuchsia-500 disabled:cursor-not-allowed"
+                        />
+                        <span>
+                          <span className="block text-sm text-[#EDF0F4]">
+                            鏡像編號
+                          </span>
+                          <span className="block hintText">
+                            欄號改為由右至左，適合從講臺看向學生時使用。
                           </span>
                         </span>
                       </label>
@@ -1290,6 +1495,131 @@ export const SeatTable = () => {
                       })}
                     </div>
                   )}
+                </DialogPanel>
+              </TransitionChild>
+            </div>
+          </div>
+        </Dialog>
+      </Transition>
+
+      {seatMenu && seatMenuTarget && (
+        <div
+          role="menu"
+          aria-label="座位選單"
+          style={{
+            left: `${seatMenu.x}px`,
+            top: `${seatMenu.y}px`,
+            width: `${SEAT_MENU_WIDTH}px`,
+          }}
+          className="fixed z-40 overflow-hidden rounded-lg border border-[#444B5F] bg-[#1C2133] py-1 shadow-2xl"
+          onPointerDown={(event) => event.stopPropagation()}
+          onContextMenu={(event) => event.preventDefault()}
+        >
+          {seatMenuTarget.status === seatStatus.emp ? (
+            <button
+              type="button"
+              role="menuitem"
+              className="seatMenuItem"
+              onClick={() => toggleSeatStatusFromMenu(seatMenu.index)}
+            >
+              啟用座位
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                className="seatMenuItem"
+                onClick={() => openSeatRename(seatMenu.index)}
+              >
+                修改文字
+              </button>
+              {seatMenuTarget.status === seatStatus.occ ? (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="seatMenuItem text-red-300 hover:text-red-200"
+                  onClick={() => removeSeatStudent(seatMenu.index)}
+                >
+                  刪除學生
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="seatMenuItem"
+                  onClick={() => toggleSeatStatusFromMenu(seatMenu.index)}
+                >
+                  停用座位
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      <Transition show={renameSeatIndex !== null}>
+        <Dialog
+          as="div"
+          className="relative z-10 focus:outline-none"
+          onClose={closeSeatRename}
+        >
+          <div className="fixed inset-0 z-10 w-screen overflow-y-auto bg-black/30">
+            <div className="flex min-h-full items-center justify-center p-4">
+              <TransitionChild
+                enter="ease-out duration-200"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+                leave="ease-in duration-150"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+              >
+                <DialogPanel className="w-full max-w-sm rounded-xl bg-[#23283D] p-6 shadow-xl">
+                  <form onSubmit={submitSeatRename}>
+                    <DialogTitle
+                      as="h3"
+                      className="text-base font-medium text-[#EDF0F4]"
+                    >
+                      修改座位文字
+                    </DialogTitle>
+                    <p className="mt-1 text-xs text-[#ACB4C0]">
+                      {renameSeatLabel}
+                    </p>
+
+                    <label className="mt-5 block">
+                      <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                        座位文字
+                      </span>
+                      <input
+                        type="text"
+                        autoFocus
+                        value={renameValue}
+                        maxLength={40}
+                        onChange={(event) => setRenameValue(event.target.value)}
+                        placeholder="例如：王小明"
+                        className="block h-10 w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+                      />
+                      <span className="formHint hintText">
+                        留空代表清除學生，座位會回到可分配狀態。
+                      </span>
+                    </label>
+
+                    <div className="mt-6 flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={closeSeatRename}
+                        className="rounded-lg px-3 py-2 text-xs font-bold text-[#ACB4C0] transition hover:bg-white/5 hover:text-[#EDF0F4]"
+                      >
+                        取消
+                      </button>
+                      <button
+                        type="submit"
+                        className="rounded-lg border border-fuchsia-400 bg-fuchsia-400/10 px-3 py-2 text-xs font-bold text-fuchsia-300 transition hover:bg-fuchsia-400/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-400"
+                      >
+                        儲存
+                      </button>
+                    </div>
+                  </form>
                 </DialogPanel>
               </TransitionChild>
             </div>

@@ -12,6 +12,8 @@ interface SeatExportLayout {
 interface SeatExportOptions {
   title?: string;
   showPodium?: boolean;
+  showIndex?: boolean;
+  mirrorIndex?: boolean;
 }
 
 interface SeatExportPalette {
@@ -24,12 +26,14 @@ interface SeatExportPalette {
 const EXPORT_SCALE = 2;
 const MIN_EXPORT_WIDTH = 720;
 const EXPORT_PADDING = 48;
-const EXPORT_HEADER_HEIGHT = 120;
+const EXPORT_HEADER_HEIGHT = 92;
 const PODIUM_HEIGHT = 42;
 const PODIUM_GAP = 24;
 const SEAT_WIDTH = 136;
 const SEAT_HEIGHT = 54;
 const SEAT_GAP = 12;
+const INDEX_GUTTER = 44;
+const INDEX_FOOTER = 40;
 const DEFAULT_EXPORT_TITLE = "學生座位表";
 
 const getSeatPalette = (status: string): SeatExportPalette => {
@@ -89,16 +93,23 @@ const createSeatLayoutCanvas = (
 ) => {
   const title = options.title?.trim() || DEFAULT_EXPORT_TITLE;
   const podiumSpace = options.showPodium ? PODIUM_HEIGHT + PODIUM_GAP : 0;
+  const indexGutter = options.showIndex ? INDEX_GUTTER : 0;
+  const indexFooter = options.showIndex ? INDEX_FOOTER : 0;
   const gridWidth =
     layout.colCount * SEAT_WIDTH + (layout.colCount - 1) * SEAT_GAP;
   const gridHeight =
     layout.rowCount * SEAT_HEIGHT + (layout.rowCount - 1) * SEAT_GAP;
+  const contentWidth = gridWidth + indexGutter;
   const exportWidth = Math.max(
     MIN_EXPORT_WIDTH,
-    gridWidth + EXPORT_PADDING * 2,
+    contentWidth + EXPORT_PADDING * 2,
   );
   const exportHeight =
-    EXPORT_HEADER_HEIGHT + podiumSpace + gridHeight + EXPORT_PADDING;
+    EXPORT_HEADER_HEIGHT +
+    podiumSpace +
+    gridHeight +
+    indexFooter +
+    EXPORT_PADDING;
   const canvas = document.createElement("canvas");
   canvas.width = exportWidth * EXPORT_SCALE;
   canvas.height = exportHeight * EXPORT_SCALE;
@@ -109,16 +120,6 @@ const createSeatLayoutCanvas = (
   context.scale(EXPORT_SCALE, EXPORT_SCALE);
   context.fillStyle = "#F7F8FC";
   context.fillRect(0, 0, exportWidth, exportHeight);
-
-  const occupiedCount = layout.seats.reduce(
-    (count, seat) => count + Number(seat.status === "occ"),
-    0,
-  );
-  const unavailableCount = layout.seats.reduce(
-    (count, seat) => count + Number(seat.status === "emp"),
-    0,
-  );
-  const availableCount = layout.seats.length - occupiedCount - unavailableCount;
 
   context.fillStyle = "#252A3B";
   context.font =
@@ -131,19 +132,10 @@ const createSeatLayoutCanvas = (
     42,
   );
 
-  context.fillStyle = "#667085";
-  context.font =
-    '500 14px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
-  context.fillText(
-    `${layout.rowCount} 列 × ${layout.colCount} 欄 · 已分配 ${occupiedCount} · 空位 ${availableCount} · 停用 ${unavailableCount}`,
-    EXPORT_PADDING,
-    76,
-  );
-
   context.fillStyle = "#D946EF";
-  context.fillRect(EXPORT_PADDING, 98, exportWidth - EXPORT_PADDING * 2, 2);
+  context.fillRect(EXPORT_PADDING, 70, exportWidth - EXPORT_PADDING * 2, 2);
 
-  const gridX = (exportWidth - gridWidth) / 2;
+  const gridX = (exportWidth - contentWidth) / 2 + indexGutter;
   const gridY = EXPORT_HEADER_HEIGHT + podiumSpace;
 
   if (options.showPodium) {
@@ -151,7 +143,7 @@ const createSeatLayoutCanvas = (
       gridWidth,
       Math.max(240, Math.round(gridWidth * 0.45)),
     );
-    const podiumX = (exportWidth - podiumWidth) / 2;
+    const podiumX = gridX + (gridWidth - podiumWidth) / 2;
 
     context.beginPath();
     context.roundRect(
@@ -207,6 +199,34 @@ const createSeatLayoutCanvas = (
       y + SEAT_HEIGHT / 2,
     );
   });
+
+  if (options.showIndex) {
+    context.fillStyle = "#667085";
+    context.font =
+      '700 16px "Noto Sans TC", "Microsoft JhengHei", sans-serif';
+    context.textBaseline = "middle";
+
+    context.textAlign = "right";
+    for (let row = 0; row < layout.rowCount; row++) {
+      context.fillText(
+        String(row + 1),
+        gridX - 14,
+        gridY + row * (SEAT_HEIGHT + SEAT_GAP) + SEAT_HEIGHT / 2,
+      );
+    }
+
+    context.textAlign = "center";
+    for (let col = 0; col < layout.colCount; col++) {
+      const columnNumber = options.mirrorIndex
+        ? layout.colCount - col
+        : col + 1;
+      context.fillText(
+        String(columnNumber),
+        gridX + col * (SEAT_WIDTH + SEAT_GAP) + SEAT_WIDTH / 2,
+        gridY + gridHeight + INDEX_FOOTER / 2,
+      );
+    }
+  }
 
   return canvas;
 };

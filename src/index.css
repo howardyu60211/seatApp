@@ -22,17 +22,36 @@
         @apply border-blue-400 text-blue-400;
     }
 
+    .seatIndex {
+        @apply mx-1 my-1 flex h-8 items-center justify-center
+        select-none text-[11px] font-bold text-[#7F8798];
+    }
+
     .basicButtonAnimation {
         @apply transition-all border-transparent active:opacity-85 
-        hover:border-fuchsia-500 duration-100;
+        hover:border-fuchsia-400 duration-100;
     }
 
     .functionalButton {
         @apply select-none h-11 px-4 mb-0
         font-bold text-center uppercase align-middle
         bg-transparent border border-solid rounded-lg
-        shadow-none cursor-pointer text-xs text-fuchsia-500 
+        shadow-none cursor-pointer text-xs text-fuchsia-400 
         disabled:border-transparent disabled:text-gray-700 disabled:cursor-not-allowed;
+    }
+
+    .seatMenuItem {
+        @apply block w-full px-3 py-2 text-left text-xs font-medium
+        text-[#EDF0F4] transition cursor-pointer
+        hover:bg-white/5 hover:text-fuchsia-300;
+    }
+
+    .hintText {
+        @apply select-none text-[11px] text-[#7F8798];
+    }
+
+    .formHint {
+        @apply mt-1 block;
     }
 }
 
