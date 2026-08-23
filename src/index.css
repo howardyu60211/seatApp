@@ -27,6 +27,16 @@
         size-3 align-[-2px] text-fuchsia-400;
     }
 
+    .seatTag {
+        @apply ml-1 align-baseline text-[10px] font-normal text-[#7F8798];
+    }
+
+    .selectField {
+        @apply block w-full rounded-lg border border-[#596178] px-3 py-2
+        text-sm text-[#EDF0F4] outline-none transition
+        focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20;
+    }
+
     .seatIndex {
         @apply mx-1 my-1 flex h-8 items-center justify-center
         select-none text-[11px] font-bold text-[#7F8798];

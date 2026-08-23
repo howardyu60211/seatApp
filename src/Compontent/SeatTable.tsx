@@ -17,24 +17,29 @@ import {
 } from "react";
 import { exportSeatLayoutAsPdf, exportSeatLayoutAsPng } from "./seatExport";
 import StatusBar from "./seatBar";
+import {
+  createSeat,
+  createSeatLayout,
+  createSeatList,
+  seatStatus,
+  shuffle,
+  type Seat,
+  type SeatLayout,
+  type SeatStudent,
+} from "./seatModel";
+import {
+  ARRANGE_MODE_LABELS,
+  arrangeSeats,
+  EXAM_PATTERN_LABELS,
+  NUMERIC_GROUPING_LABELS,
+  NUMERIC_ORDER_LABELS,
+  type ArrangeMode,
+  type ExamPattern,
+  type NumericGrouping,
+  type NumericOrder,
+} from "./seatArrange";
 
-export enum seatStatus {
-  emp = "emp",
-  ava = "ava",
-  occ = "occ",
-}
-
-interface Seat {
-  status: seatStatus;
-  name: string;
-  pinned: boolean;
-}
-
-interface SeatLayout {
-  rowCount: number;
-  colCount: number;
-  seats: Seat[];
-}
+export { seatStatus, type Seat } from "./seatModel";
 
 interface SeatHistoryEntry extends SeatLayout {
   id: string;
@@ -52,7 +57,10 @@ interface SeatMenuState {
   y: number;
 }
 
-type StoredSeat = Omit<Seat, "pinned"> & { pinned?: unknown };
+type StoredSeat = Omit<Seat, "pinned" | "tag"> & {
+  pinned?: unknown;
+  tag?: unknown;
+};
 
 type StoredSeatHistoryEntry = Omit<SeatHistoryEntry, "name" | "seats"> & {
   name?: unknown;
@@ -60,12 +68,45 @@ type StoredSeatHistoryEntry = Omit<SeatHistoryEntry, "name" | "seats"> & {
 };
 
 type ImportFormatMode = "join-row" | "selected-columns";
+type ImportTagSource = "none" | "order" | "column";
 type ExportFormat = "xlsx" | "pdf" | "png";
+
+interface ImportSettings {
+  formatMode: ImportFormatMode;
+  separator: string;
+  columns: string;
+  skipFirstRow: boolean;
+  tagSource: ImportTagSource;
+  /** 1-based 欄位編號，只有 tagSource 為 column 時會用到。 */
+  tagColumn: string;
+}
+
+const IMPORT_TAG_SOURCE_LABELS: Record<ImportTagSource, string> = {
+  none: "不記憶",
+  order: "依名單順序",
+  column: "指定欄位",
+};
+
+const IMPORT_TAG_SOURCE_HINTS: Record<ImportTagSource, string> = {
+  none: "匯入的學生不會帶排序依據，只能用完全隨機排座位。",
+  order: "照名單由上往下編號 1、2、3…，適合座號或已經排好序的名單。",
+  column: "記住指定欄的值（例如成績、組別、性別）。Excel 的 A 欄是第 1 欄。",
+};
 
 const EXPORT_FORMAT_LABELS: Record<ExportFormat, string> = {
   xlsx: "XLSX",
   pdf: "PDF",
   png: "PNG",
+};
+
+const ARRANGE_MODE_HINTS: Record<ArrangeMode, string> = {
+  random:
+    "再抽一次會把未釘選的學生重新隨機分配；已釘選（名字前有圖釘）的座位會留在原位。",
+  category:
+    "依匯入時記住的排序依據分類，讓相鄰座位盡量落在不同類別，座位之間不留空白。",
+  exam: "先依座位圖樣留出空位，再讓相鄰座位盡量落在不同類別，適合安排考試座位。",
+  numeric:
+    "依排序依據的數值大小，照選定的填入方式依序排入座位；沒有數值的學生會排在最後。",
 };
 
 const DEFAULT_ROW_COUNT = 6;
@@ -75,6 +116,7 @@ const MAX_COL_COUNT = 11;
 const MAX_HISTORY_COUNT = 30;
 const MAX_UNDO_COUNT = 50;
 const HISTORY_STORAGE_KEY = "seatapp.favorite-seat-layouts.v1";
+const IMPORT_SETTINGS_STORAGE_KEY = "seatapp.import-settings.v1";
 const SEAT_MENU_WIDTH = 168;
 const SEAT_MENU_ITEM_HEIGHT = 34;
 const SEAT_MENU_PADDING = 8;
@@ -83,19 +125,14 @@ const SEAT_SETTLE_STEP = 40;
 const SEAT_SETTLE_MAX_DELAY = 700;
 const SEAT_SETTLE_DURATION = 260;
 
-const createSeat = (
-  status = seatStatus.ava,
-  name = "",
-  pinned = false,
-): Seat => ({
-  status,
-  name: status === seatStatus.emp ? "X" : name,
-  // 只有已分配的座位能被釘選，避免狀態與釘選互相矛盾。
-  pinned: status === seatStatus.occ && pinned,
-});
-
-const createSeatList = (count: number) =>
-  Array.from({ length: count }, () => createSeat());
+const DEFAULT_IMPORT_SETTINGS: ImportSettings = {
+  formatMode: "join-row",
+  separator: " ",
+  columns: "1,2",
+  skipFirstRow: false,
+  tagSource: "none",
+  tagColumn: "",
+};
 
 const isStoredSeat = (value: unknown): value is StoredSeat => {
   if (!value || typeof value !== "object") return false;
@@ -104,12 +141,18 @@ const isStoredSeat = (value: unknown): value is StoredSeat => {
   return (
     typeof seat.name === "string" &&
     Object.values(seatStatus).includes(seat.status as seatStatus) &&
-    (seat.pinned === undefined || typeof seat.pinned === "boolean")
+    (seat.pinned === undefined || typeof seat.pinned === "boolean") &&
+    (seat.tag === undefined || typeof seat.tag === "string")
   );
 };
 
 const normalizeStoredSeat = (seat: StoredSeat): Seat =>
-  createSeat(seat.status, seat.name, seat.pinned === true);
+  createSeat(
+    seat.status,
+    seat.name,
+    seat.pinned === true,
+    typeof seat.tag === "string" ? seat.tag : "",
+  );
 
 const loadSeatHistory = (): SeatHistoryEntry[] => {
   try {
@@ -155,16 +198,6 @@ const loadSeatHistory = (): SeatHistoryEntry[] => {
   }
 };
 
-const createSeatLayout = (
-  rowCount: number,
-  colCount: number,
-  seats: Seat[],
-): SeatLayout => ({
-  rowCount,
-  colCount,
-  seats: seats.map((seat) => ({ ...seat })),
-});
-
 const createHistoryEntry = (
   name: string,
   rowCount: number,
@@ -188,6 +221,69 @@ const persistSeatHistory = (history: SeatHistoryEntry[]) => {
   }
 };
 
+const parseImportTagColumn = (value: string) => {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) return { column: null as number | null };
+
+  const column = Number(trimmedValue);
+  if (!Number.isInteger(column) || column < 1) return null;
+
+  return { column };
+};
+
+const loadImportSettings = (): ImportSettings => {
+  try {
+    const storedSettings = JSON.parse(
+      localStorage.getItem(IMPORT_SETTINGS_STORAGE_KEY) ?? "null",
+    ) as unknown;
+
+    if (!storedSettings || typeof storedSettings !== "object") {
+      return DEFAULT_IMPORT_SETTINGS;
+    }
+
+    const settings = storedSettings as Partial<ImportSettings>;
+    return {
+      formatMode:
+        settings.formatMode === "selected-columns" ||
+        settings.formatMode === "join-row"
+          ? settings.formatMode
+          : DEFAULT_IMPORT_SETTINGS.formatMode,
+      separator:
+        typeof settings.separator === "string"
+          ? settings.separator
+          : DEFAULT_IMPORT_SETTINGS.separator,
+      columns:
+        typeof settings.columns === "string"
+          ? settings.columns
+          : DEFAULT_IMPORT_SETTINGS.columns,
+      skipFirstRow: settings.skipFirstRow === true,
+      tagSource:
+        settings.tagSource === "order" ||
+        settings.tagSource === "column" ||
+        settings.tagSource === "none"
+          ? settings.tagSource
+          : // 早期版本只存欄位編號，有值就當成指定欄位。
+            typeof settings.tagColumn === "string" && settings.tagColumn.trim()
+            ? "column"
+            : DEFAULT_IMPORT_SETTINGS.tagSource,
+      tagColumn:
+        typeof settings.tagColumn === "string"
+          ? settings.tagColumn
+          : DEFAULT_IMPORT_SETTINGS.tagColumn,
+    };
+  } catch {
+    return DEFAULT_IMPORT_SETTINGS;
+  }
+};
+
+const persistImportSettings = (settings: ImportSettings) => {
+  try {
+    localStorage.setItem(IMPORT_SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // 無法寫入 local storage 時，設定仍可在本次執行中使用。
+  }
+};
+
 const parseImportColumns = (value: string) => {
   const tokens = value.split(/[,，\s]+/).filter(Boolean);
   if (tokens.length === 0) return null;
@@ -198,14 +294,6 @@ const parseImportColumns = (value: string) => {
   }
 
   return [...new Set(columns)];
-};
-
-const shuffle = <T,>(values: T[]) => {
-  for (let i = values.length - 1; i > 0; i--) {
-    const randomIndex = Math.floor(Math.random() * (i + 1));
-    [values[i], values[randomIndex]] = [values[randomIndex], values[i]];
-  }
-  return values;
 };
 
 const PinIcon = () => (
@@ -222,17 +310,11 @@ const PinIcon = () => (
 export const SeatTable = () => {
   const [initialSeatHistory] = useState(loadSeatHistory);
   const [initialSeatLayout] = useState<SeatLayout>(() =>
-    initialSeatHistory[0]
-      ? createSeatLayout(
-          initialSeatHistory[0].rowCount,
-          initialSeatHistory[0].colCount,
-          initialSeatHistory[0].seats,
-        )
-      : createSeatLayout(
-          DEFAULT_ROW_COUNT,
-          DEFAULT_COL_COUNT,
-          createSeatList(DEFAULT_ROW_COUNT * DEFAULT_COL_COUNT),
-        ),
+    createSeatLayout(
+      DEFAULT_ROW_COUNT,
+      DEFAULT_COL_COUNT,
+      createSeatList(DEFAULT_ROW_COUNT * DEFAULT_COL_COUNT),
+    ),
   );
   const [rowCount, setRowCount] = useState(initialSeatLayout.rowCount);
   const [colCount, setColCount] = useState(initialSeatLayout.colCount);
@@ -251,11 +333,31 @@ export const SeatTable = () => {
     useState(false);
   const [undoStack, setUndoStack] = useState<SeatLayout[]>([]);
   const [redoStack, setRedoStack] = useState<SeatLayout[]>([]);
-  const [importFormatMode, setImportFormatMode] =
-    useState<ImportFormatMode>("join-row");
-  const [importSeparator, setImportSeparator] = useState(" ");
-  const [importColumns, setImportColumns] = useState("1,2");
-  const [skipFirstRow, setSkipFirstRow] = useState(false);
+  const [initialImportSettings] = useState(loadImportSettings);
+  const [importFormatMode, setImportFormatMode] = useState<ImportFormatMode>(
+    initialImportSettings.formatMode,
+  );
+  const [importSeparator, setImportSeparator] = useState(
+    initialImportSettings.separator,
+  );
+  const [importColumns, setImportColumns] = useState(
+    initialImportSettings.columns,
+  );
+  const [importTagSource, setImportTagSource] = useState<ImportTagSource>(
+    initialImportSettings.tagSource,
+  );
+  const [importTagColumn, setImportTagColumn] = useState(
+    initialImportSettings.tagColumn,
+  );
+  const [skipFirstRow, setSkipFirstRow] = useState(
+    initialImportSettings.skipFirstRow,
+  );
+  const [arrangeMode, setArrangeMode] = useState<ArrangeMode>("random");
+  const [examPattern, setExamPattern] = useState<ExamPattern>("column-gap");
+  const [numericOrder, setNumericOrder] = useState<NumericOrder>("asc");
+  const [numericGrouping, setNumericGrouping] =
+    useState<NumericGrouping>("row-major");
+  const [randomizeWithinGroup, setRandomizeWithinGroup] = useState(true);
   const [exportTitle, setExportTitle] = useState("學生座位表");
   const [showExportPodium, setShowExportPodium] = useState(false);
   const [showExportIndex, setShowExportIndex] = useState(true);
@@ -269,6 +371,25 @@ export const SeatTable = () => {
   const [settleRun, setSettleRun] = useState(0);
   const settleTimerRef = useRef<number | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  const [renameTagValue, setRenameTagValue] = useState("");
+
+  useEffect(() => {
+    persistImportSettings({
+      formatMode: importFormatMode,
+      separator: importSeparator,
+      columns: importColumns,
+      skipFirstRow,
+      tagSource: importTagSource,
+      tagColumn: importTagColumn,
+    });
+  }, [
+    importColumns,
+    importFormatMode,
+    importSeparator,
+    importTagColumn,
+    importTagSource,
+    skipFirstRow,
+  ]);
 
   const formatImportedRow = (row: unknown[]) => {
     const cells =
@@ -284,14 +405,26 @@ export const SeatTable = () => {
       .trim();
   };
 
+  const readImportedTag = (row: unknown[], order: number) => {
+    if (importTagSource === "order") return String(order);
+    if (importTagSource !== "column") return "";
+
+    const parsedTagColumn = parseImportTagColumn(importTagColumn);
+    if (!parsedTagColumn?.column) return "";
+
+    return String(row[parsedTagColumn.column - 1] ?? "").trim();
+  };
+
   const separatorDescription =
     importSeparator === ""
       ? "不分隔"
       : /^ +$/.test(importSeparator)
         ? `${importSeparator.length} 個空白`
         : `「${importSeparator}」`;
+  const importSampleRow = ["A01", "王小明", "三年甲班"];
   const importPreview =
-    formatImportedRow(["A01", "王小明", "三年甲班"]) || "（空白，不會匯入）";
+    formatImportedRow(importSampleRow) || "（空白，不會匯入）";
+  const importTagPreview = readImportedTag(importSampleRow, 1);
 
   const showOperationNotice = useCallback((message: string) => {
     setOperationNotice({ message });
@@ -542,11 +675,12 @@ export const SeatTable = () => {
     status: Readonly<seatStatus>,
     text = "",
     pinned = false,
+    tag = "",
   ) => {
     if (!seatList[i]) return;
 
     const nextSeats = [...seatList];
-    nextSeats[i] = createSeat(status, text, pinned);
+    nextSeats[i] = createSeat(status, text, pinned, tag);
     applySeatLayout(rowCount, colCount, nextSeats);
   };
 
@@ -570,7 +704,7 @@ export const SeatTable = () => {
     inputFile();
   };
 
-  const importData = (students: string[]) => {
+  const importData = (students: SeatStudent[]) => {
     const capacity = seatList.reduce(
       (count, seat) => count + Number(seat.status === seatStatus.ava),
       0,
@@ -584,7 +718,11 @@ export const SeatTable = () => {
     const shuffledSeatIndexes = shuffle(
       seatList.map((_, seatIndex) => seatIndex),
     );
-    const nextSeats = seatList.map(() => createSeat(seatStatus.emp));
+    const nextSeats = seatList.map((seat) =>
+      createSeat(
+        seat.status === seatStatus.emp ? seatStatus.emp : seatStatus.ava,
+      ),
+    );
     let studentIndex = 0;
 
     for (const seatIndex of shuffledSeatIndexes) {
@@ -594,7 +732,9 @@ export const SeatTable = () => {
       ) {
         nextSeats[seatIndex] = createSeat(
           seatStatus.occ,
-          students[studentIndex],
+          students[studentIndex].name,
+          false,
+          students[studentIndex].tag,
         );
         studentIndex++;
       }
@@ -612,14 +752,56 @@ export const SeatTable = () => {
 
   useEffect(() => clearSettleTimer, [clearSettleTimer]);
 
+  /** 讓剛填入學生的座位依序彈跳，delay 形成波浪效果。 */
+  const playSettleAnimation = useCallback(
+    (orderedSeatIndexes: number[]) => {
+      if (orderedSeatIndexes.length === 0) return;
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+      const step = Math.min(
+        SEAT_SETTLE_STEP,
+        SEAT_SETTLE_MAX_DELAY / Math.max(orderedSeatIndexes.length - 1, 1),
+      );
+      const nextSettleDelays: Record<number, number> = {};
+      let lastDelay = 0;
+
+      orderedSeatIndexes.forEach((seatIndex, position) => {
+        lastDelay = Math.round(position * step);
+        nextSettleDelays[seatIndex] = lastDelay;
+      });
+
+      clearSettleTimer();
+      setSettleRun((previousRun) => previousRun + 1);
+      setSettleDelays(nextSettleDelays);
+      settleTimerRef.current = window.setTimeout(
+        () => {
+          settleTimerRef.current = null;
+          setSettleDelays({});
+        },
+        lastDelay + SEAT_SETTLE_DURATION + 80,
+      );
+    },
+    [clearSettleTimer],
+  );
+
+  const describePinnedSeats = () => {
+    const pinnedCount = seatList.reduce(
+      (count, seat) =>
+        count + Number(seat.status === seatStatus.occ && seat.pinned),
+      0,
+    );
+
+    return pinnedCount > 0 ? `，保留 ${pinnedCount} 個釘選座位` : "";
+  };
+
   const reshuffleSeats = () => {
-    const movableStudents: string[] = [];
+    const movableStudents: SeatStudent[] = [];
     const targetIndexes: number[] = [];
 
     seatList.forEach((seat, seatIndex) => {
       if (seat.status === seatStatus.occ) {
         if (seat.pinned) return;
-        movableStudents.push(seat.name);
+        movableStudents.push({ name: seat.name, tag: seat.tag });
         targetIndexes.push(seatIndex);
       } else if (seat.status === seatStatus.ava) {
         targetIndexes.push(seatIndex);
@@ -636,70 +818,76 @@ export const SeatTable = () => {
       return;
     }
 
-    // 以空字串補滿其餘可分配座位，讓學生能被隨機抽到任何一個未釘選的位置。
+    // 以空位補滿其餘可分配座位，讓學生能被隨機抽到任何一個未釘選的位置。
     const blanks = Array.from(
       { length: targetIndexes.length - movableStudents.length },
-      () => "",
+      () => null,
     );
     const previousNames = targetIndexes.map(
       (seatIndex) => seatList[seatIndex].name,
     );
 
-    let nextNames = shuffle([...movableStudents, ...blanks]);
+    let nextStudents = shuffle<SeatStudent | null>([
+      ...movableStudents,
+      ...blanks,
+    ]);
     for (
       let attempt = 0;
       attempt < MAX_RESHUFFLE_ATTEMPT &&
-      nextNames.every((name, position) => name === previousNames[position]);
+      nextStudents.every(
+        (student, position) =>
+          (student?.name ?? "") === previousNames[position],
+      );
       attempt++
     ) {
-      nextNames = shuffle([...movableStudents, ...blanks]);
+      nextStudents = shuffle<SeatStudent | null>([
+        ...movableStudents,
+        ...blanks,
+      ]);
     }
 
     const nextSeats = [...seatList];
+    const settleOrder: number[] = [];
     targetIndexes.forEach((seatIndex, position) => {
-      const name = nextNames[position];
-      nextSeats[seatIndex] = name
-        ? createSeat(seatStatus.occ, name)
+      const student = nextStudents[position];
+      nextSeats[seatIndex] = student
+        ? createSeat(seatStatus.occ, student.name, false, student.tag)
         : createSeat(seatStatus.ava);
+      if (student) settleOrder.push(seatIndex);
     });
-
-    const pinnedCount = seatList.reduce(
-      (count, seat) =>
-        count + Number(seat.status === seatStatus.occ && seat.pinned),
-      0,
-    );
 
     applySeatLayout(rowCount, colCount, nextSeats);
+    showOperationNotice(`已再抽一次${describePinnedSeats()}`);
+    playSettleAnimation(settleOrder);
+  };
+
+  const applyArrangement = () => {
+    if (arrangeMode === "random") {
+      reshuffleSeats();
+      return;
+    }
+
+    const result = arrangeSeats(
+      { rowCount, colCount, seats: seatList },
+      {
+        mode: arrangeMode,
+        examPattern,
+        numericOrder,
+        numericGrouping,
+        randomizeWithinGroup,
+      },
+    );
+
+    if (!result.ok) {
+      alert(result.error);
+      return;
+    }
+
+    applySeatLayout(rowCount, colCount, result.seats);
     showOperationNotice(
-      pinnedCount > 0
-        ? `已再抽一次，保留 ${pinnedCount} 個釘選座位`
-        : "已再抽一次",
+      `已套用「${ARRANGE_MODE_LABELS[arrangeMode]}」${describePinnedSeats()}`,
     );
-
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-
-    // 抽到學生的座位依序彈跳，delay 讓整批座位形成波浪效果。
-    const step = Math.min(
-      SEAT_SETTLE_STEP,
-      SEAT_SETTLE_MAX_DELAY / Math.max(targetIndexes.length - 1, 1),
-    );
-    const nextSettleDelays: Record<number, number> = {};
-    let lastDelay = 0;
-
-    targetIndexes.forEach((seatIndex, position) => {
-      if (!nextNames[position]) return;
-
-      lastDelay = Math.round(position * step);
-      nextSettleDelays[seatIndex] = lastDelay;
-    });
-
-    clearSettleTimer();
-    setSettleRun((previousRun) => previousRun + 1);
-    setSettleDelays(nextSettleDelays);
-    settleTimerRef.current = window.setTimeout(() => {
-      settleTimerRef.current = null;
-      setSettleDelays({});
-    }, lastDelay + SEAT_SETTLE_DURATION + 80);
+    playSettleAnimation(result.filledOrder);
   };
 
   const exportExcel = async () => {
@@ -809,7 +997,10 @@ export const SeatTable = () => {
         8,
         Math.min(event.clientX, window.innerWidth - SEAT_MENU_WIDTH - 8),
       ),
-      y: Math.max(8, Math.min(event.clientY, window.innerHeight - menuHeight - 8)),
+      y: Math.max(
+        8,
+        Math.min(event.clientY, window.innerHeight - menuHeight - 8),
+      ),
     });
   };
 
@@ -820,6 +1011,7 @@ export const SeatTable = () => {
     closeSeatMenu();
     setRenameSeatIndex(seatIndex);
     setRenameValue(seat.name);
+    setRenameTagValue(seat.tag);
   };
 
   const closeSeatRename = () => setRenameSeatIndex(null);
@@ -834,6 +1026,7 @@ export const SeatTable = () => {
       name ? seatStatus.occ : seatStatus.ava,
       name,
       seatList[renameSeatIndex].pinned,
+      renameTagValue.trim(),
     );
     setRenameSeatIndex(null);
     showOperationNotice(name ? `已改為「${name}」` : "已清空座位文字");
@@ -855,7 +1048,13 @@ export const SeatTable = () => {
     if (!seat || seat.status !== seatStatus.occ) return;
 
     closeSeatMenu();
-    changeSeatStatus(seatIndex, seatStatus.occ, seat.name, !seat.pinned);
+    changeSeatStatus(
+      seatIndex,
+      seatStatus.occ,
+      seat.name,
+      !seat.pinned,
+      seat.tag,
+    );
     showOperationNotice(
       seat.pinned ? `已取消釘選「${seat.name}」` : `已釘選「${seat.name}」`,
     );
@@ -888,6 +1087,14 @@ export const SeatTable = () => {
       return;
     }
 
+    if (
+      importTagSource === "column" &&
+      !parseImportTagColumn(importTagColumn)
+    ) {
+      alert("排序依據欄位請輸入單一欄位編號，例如 3。");
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = async (event) => {
       if (!(event.target?.result instanceof ArrayBuffer)) return;
@@ -906,7 +1113,14 @@ export const SeatTable = () => {
           { header: 1 },
         );
         const rowsToImport = skipFirstRow ? rows.slice(1) : rows;
-        const students = rowsToImport.map(formatImportedRow).filter(Boolean);
+        // 先濾掉空白列，名單順序才不會被空列佔號。
+        const students = rowsToImport
+          .map((row) => ({ row, name: formatImportedRow(row) }))
+          .filter((entry) => entry.name)
+          .map((entry, index) => ({
+            name: entry.name,
+            tag: readImportedTag(entry.row, index + 1),
+          }));
 
         if (students.length === 0) {
           alert("Excel 檔案中沒有學生資料。");
@@ -977,6 +1191,15 @@ export const SeatTable = () => {
     0,
   );
   const movableStudentCount = seatCounts[seatStatus.occ] - pinnedSeatCount;
+  const taggedStudentCount = seatList.reduce(
+    (count, seat) =>
+      count + Number(seat.status === seatStatus.occ && seat.tag.trim() !== ""),
+    0,
+  );
+  const needsTagData = arrangeMode === "category" || arrangeMode === "numeric";
+  const isArrangeBlocked =
+    movableStudentCount === 0 || (needsTagData && taggedStudentCount === 0);
+  const arrangeHint = ARRANGE_MODE_HINTS[arrangeMode];
 
   const seatMenuTarget = seatMenu ? seatList[seatMenu.index] : undefined;
   const renameSeatLabel =
@@ -998,7 +1221,8 @@ export const SeatTable = () => {
                 學生座位預覽
               </p>
               <p className="select-none text-[#ACB4C0] font-normal text-[14px] leading-[130%]">
-                在此修改並匯出學生座位。左鍵切換座位狀態，右鍵可修改文字、釘選或刪除學生。
+                左鍵切換座位狀態，右鍵可修改文字、釘選或刪除學生。Ctrl + Z
+                可以復原，Ctrl + Y 可以重做。
               </p>
             </div>
 
@@ -1037,22 +1261,144 @@ export const SeatTable = () => {
               <p className="select-none text-[14px] font-medium leading-[130%] text-[#EDF0F4]">
                 座位排序
               </p>
-              <p className="mt-1.5 hintText">
-                再抽一次會把未釘選的學生重新隨機分配；已釘選（名字前有圖釘）的座位會留在原位。
-              </p>
+              <p className="mt-1.5 hintText">{arrangeHint}</p>
               <p className="mt-1 hintText">
-                可重抽 {movableStudentCount} 人 · 已釘選 {pinnedSeatCount} 個座位
+                可重排 {movableStudentCount} 人 · 已釘選 {pinnedSeatCount}{" "}
+                個座位 · 有排序依據 {taggedStudentCount} 人
               </p>
+              {needsTagData && taggedStudentCount === 0 && (
+                <p className="mt-1 select-none text-[11px] text-red-400">
+                  這個排序方式需要排序依據資料，請在「匯入學生」設定中指定排序依據欄位後重新匯入。
+                </p>
+              )}
             </div>
 
             <button
               type="button"
-              onClick={reshuffleSeats}
-              disabled={movableStudentCount === 0}
+              onClick={applyArrangement}
+              disabled={isArrangeBlocked}
               className="functionalButton basicButtonAnimation shrink-0 border-fuchsia-400"
             >
-              再抽一次
+              {arrangeMode === "random" ? "再抽一次" : "套用排序"}
             </button>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <label className="block">
+              <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                排序方式
+              </span>
+              <select
+                value={arrangeMode}
+                onChange={(event) =>
+                  setArrangeMode(event.target.value as ArrangeMode)
+                }
+                className="selectField bg-[#141828]"
+              >
+                {(Object.keys(ARRANGE_MODE_LABELS) as ArrangeMode[]).map(
+                  (mode) => (
+                    <option key={mode} value={mode}>
+                      {ARRANGE_MODE_LABELS[mode]}
+                    </option>
+                  ),
+                )}
+              </select>
+            </label>
+
+            {arrangeMode === "exam" && (
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                  座位圖樣
+                </span>
+                <select
+                  value={examPattern}
+                  onChange={(event) =>
+                    setExamPattern(event.target.value as ExamPattern)
+                  }
+                  className="selectField bg-[#141828]"
+                >
+                  {(Object.keys(EXAM_PATTERN_LABELS) as ExamPattern[]).map(
+                    (pattern) => (
+                      <option key={pattern} value={pattern}>
+                        {EXAM_PATTERN_LABELS[pattern]}
+                      </option>
+                    ),
+                  )}
+                </select>
+                <span className="formHint hintText">
+                  沒被選到的座位會改為停用。
+                </span>
+              </label>
+            )}
+
+            {arrangeMode === "numeric" && (
+              <>
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                    數值順序
+                  </span>
+                  <select
+                    value={numericOrder}
+                    onChange={(event) =>
+                      setNumericOrder(event.target.value as NumericOrder)
+                    }
+                    className="selectField bg-[#141828]"
+                  >
+                    {(Object.keys(NUMERIC_ORDER_LABELS) as NumericOrder[]).map(
+                      (order) => (
+                        <option key={order} value={order}>
+                          {NUMERIC_ORDER_LABELS[order]}
+                        </option>
+                      ),
+                    )}
+                  </select>
+                </label>
+
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                    填入方式
+                  </span>
+                  <select
+                    value={numericGrouping}
+                    onChange={(event) =>
+                      setNumericGrouping(event.target.value as NumericGrouping)
+                    }
+                    className="selectField bg-[#141828]"
+                  >
+                    {(
+                      Object.keys(NUMERIC_GROUPING_LABELS) as NumericGrouping[]
+                    ).map((grouping) => (
+                      <option key={grouping} value={grouping}>
+                        {NUMERIC_GROUPING_LABELS[grouping]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            )}
+
+            {arrangeMode !== "random" && (
+              <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#444B5F] bg-[#141828] px-3 py-2.5 sm:col-span-3">
+                <input
+                  type="checkbox"
+                  checked={randomizeWithinGroup}
+                  onChange={(event) =>
+                    setRandomizeWithinGroup(event.target.checked)
+                  }
+                  className="size-4 accent-fuchsia-500"
+                />
+                <span>
+                  <span className="block text-sm text-[#EDF0F4]">
+                    群內隨機排序
+                  </span>
+                  <span className="block hintText">
+                    {arrangeMode === "numeric"
+                      ? "同一列／排／區塊內的學生順序隨機打亂，群與群之間仍照數值大小。"
+                      : "同一類別內的學生順序隨機打亂；取消勾選則照匯入名單的順序。"}
+                  </span>
+                </span>
+              </label>
+            )}
           </div>
         </section>
 
@@ -1172,7 +1518,9 @@ export const SeatTable = () => {
                           ? undefined
                           : { animationDelay: `${settleDelay}ms` }
                       }
-                      title={seat.pinned ? "已釘選，再抽一次時不會移動" : undefined}
+                      title={
+                        seat.pinned ? "已釘選，再抽一次時不會移動" : undefined
+                      }
                       key={
                         settleDelay === undefined
                           ? String(i)
@@ -1197,6 +1545,7 @@ export const SeatTable = () => {
                     >
                       {seat.pinned && <PinIcon />}
                       {seat.name}
+                      {seat.tag && <span className="seatTag">{seat.tag}</span>}
                     </div>
                   );
                 })}
@@ -1279,97 +1628,175 @@ export const SeatTable = () => {
                     設定 XLSX 資料的組合方式，再選擇要匯入的檔案。
                   </p>
 
-                  <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-3">
-                    <label className="block">
-                      <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
-                        資料列輸出方式
-                      </span>
-                      <select
-                        value={importFormatMode}
-                        onChange={(event) =>
-                          setImportFormatMode(
-                            event.target.value as ImportFormatMode,
-                          )
-                        }
-                        className="block w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
-                      >
-                        <option value="join-row">合併整列</option>
-                        <option value="selected-columns">組合指定欄位</option>
-                      </select>
-                    </label>
+                  <div className="mt-5 space-y-5">
+                    <section>
+                      <div className="mb-2 flex items-baseline gap-2">
+                        <h4 className="text-sm font-medium text-[#EDF0F4]">
+                          顯示欄位
+                        </h4>
+                        <span className="hintText">座位上要顯示的文字。</span>
+                      </div>
 
-                    {importFormatMode === "selected-columns" && (
-                      <label className="block">
-                        <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
-                          選取欄位與順序
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        <label className="block">
+                          <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                            方式
+                          </span>
+                          <select
+                            value={importFormatMode}
+                            onChange={(event) =>
+                              setImportFormatMode(
+                                event.target.value as ImportFormatMode,
+                              )
+                            }
+                            className="selectField bg-[#1C2133]"
+                          >
+                            <option value="join-row">合併整列</option>
+                            <option value="selected-columns">
+                              組合指定欄位
+                            </option>
+                          </select>
+                        </label>
+
+                        {importFormatMode === "selected-columns" && (
+                          <label className="block">
+                            <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                              欄位
+                            </span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={importColumns}
+                              onChange={(event) =>
+                                setImportColumns(event.target.value)
+                              }
+                              placeholder="例如：1,2,4"
+                              className="block w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+                            />
+                            <span className="formHint hintText">
+                              Excel 的 A 欄是第 1 欄。
+                            </span>
+                          </label>
+                        )}
+
+                        <label className="block">
+                          <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                            分隔字元
+                          </span>
+                          <input
+                            type="text"
+                            value={importSeparator}
+                            maxLength={12}
+                            onChange={(event) =>
+                              setImportSeparator(event.target.value)
+                            }
+                            placeholder="留空代表直接相接"
+                            className="block w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+                          />
+                          <span className="formHint hintText">
+                            目前：{separatorDescription}
+                          </span>
+                        </label>
+                      </div>
+                    </section>
+
+                    <div className="h-px bg-[#444B5F]" />
+
+                    <section>
+                      <div className="mb-2 flex items-baseline gap-2">
+                        <h4 className="text-sm font-medium text-[#EDF0F4]">
+                          排序依據
+                        </h4>
+                        <span className="hintText">
+                          排座位時用來分類或排大小的值。
                         </span>
+                      </div>
+
+                      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        <label className="block">
+                          <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                            方式
+                          </span>
+                          <select
+                            value={importTagSource}
+                            onChange={(event) =>
+                              setImportTagSource(
+                                event.target.value as ImportTagSource,
+                              )
+                            }
+                            className="selectField bg-[#1C2133]"
+                          >
+                            {(
+                              Object.keys(
+                                IMPORT_TAG_SOURCE_LABELS,
+                              ) as ImportTagSource[]
+                            ).map((source) => (
+                              <option key={source} value={source}>
+                                {IMPORT_TAG_SOURCE_LABELS[source]}
+                              </option>
+                            ))}
+                          </select>
+                          <span className="formHint hintText">
+                            {IMPORT_TAG_SOURCE_HINTS[importTagSource]}
+                          </span>
+                        </label>
+
+                        {importTagSource === "column" && (
+                          <label className="block">
+                            <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                              欄位
+                            </span>
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              value={importTagColumn}
+                              onChange={(event) =>
+                                setImportTagColumn(event.target.value)
+                              }
+                              placeholder="例如：3"
+                              className="block w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+                            />
+                            <span className="formHint hintText">
+                              Excel 的 A 欄是第 1 欄。
+                            </span>
+                          </label>
+                        )}
+                      </div>
+                    </section>
+
+                    <div className="h-px bg-[#444B5F]" />
+
+                    <div className="grid grid-cols-1 gap-4">
+                      <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#444B5F] bg-[#1C2133] px-3 py-2.5">
                         <input
-                          type="text"
-                          inputMode="numeric"
-                          value={importColumns}
+                          type="checkbox"
+                          checked={skipFirstRow}
                           onChange={(event) =>
-                            setImportColumns(event.target.value)
+                            setSkipFirstRow(event.target.checked)
                           }
-                          placeholder="例如：1,2,4"
-                          className="block w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+                          className="size-4 accent-fuchsia-500"
                         />
-                        <span className="formHint hintText">
-                          Excel 的 A 欄是第 1 欄。
+                        <span>
+                          <span className="block text-sm text-[#EDF0F4]">
+                            略過第一列
+                          </span>
+                          <span className="block hintText">
+                            Excel 第一列是姓名、班級等欄位標題時啟用。
+                          </span>
                         </span>
                       </label>
-                    )}
 
-                    <label
-                      className={
-                        importFormatMode === "join-row"
-                          ? "block sm:col-span-2"
-                          : "block"
-                      }
-                    >
-                      <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
-                        欄位分隔字元
-                      </span>
-                      <input
-                        type="text"
-                        value={importSeparator}
-                        maxLength={12}
-                        onChange={(event) =>
-                          setImportSeparator(event.target.value)
-                        }
-                        placeholder="留空代表直接相接"
-                        className="block w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
-                      />
-                      <span className="formHint hintText">
-                        目前：{separatorDescription}
-                      </span>
-                    </label>
-
-                    <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#444B5F] bg-[#1C2133] px-3 py-2.5 sm:col-span-3">
-                      <input
-                        type="checkbox"
-                        checked={skipFirstRow}
-                        onChange={(event) =>
-                          setSkipFirstRow(event.target.checked)
-                        }
-                        className="size-4 accent-fuchsia-500"
-                      />
-                      <span>
-                        <span className="block text-sm text-[#EDF0F4]">
-                          略過第一列
+                      <div className="flex items-center justify-between gap-4 rounded-lg border border-fuchsia-400/20 bg-fuchsia-400/5 px-3 py-2.5">
+                        <span className="text-xs font-medium text-fuchsia-300">
+                          範例：A01、王小明、三年甲班
                         </span>
-                        <span className="block hintText">
-                          Excel 第一列是姓名、班級等欄位標題時啟用。
-                        </span>
-                      </span>
-                    </label>
-
-                    <div className="flex items-center justify-between gap-4 rounded-lg border border-fuchsia-400/20 bg-fuchsia-400/5 px-3 py-2.5 sm:col-span-3">
-                      <span className="text-xs font-medium text-fuchsia-300">
-                        範例：A01、王小明、三年甲班
-                      </span>
-                      <code className="truncate text-right text-sm text-[#EDF0F4]">
-                        {importPreview}
-                      </code>
+                        <code className="truncate text-right text-sm text-[#EDF0F4]">
+                          {importPreview}
+                          {importTagPreview && (
+                            <span className="seatTag">{importTagPreview}</span>
+                          )}
+                        </code>
+                      </div>
                     </div>
                   </div>
 
@@ -1813,6 +2240,25 @@ export const SeatTable = () => {
                       />
                       <span className="formHint hintText">
                         留空代表清除學生，座位會回到可分配狀態。
+                      </span>
+                    </label>
+
+                    <label className="mt-4 block">
+                      <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                        排序依據
+                      </span>
+                      <input
+                        type="text"
+                        value={renameTagValue}
+                        maxLength={20}
+                        onChange={(event) =>
+                          setRenameTagValue(event.target.value)
+                        }
+                        placeholder="例如：男、A 組、85"
+                        className="block h-10 w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+                      />
+                      <span className="formHint hintText">
+                        顯示在姓名後方，座位排序時會依它分類或比大小。
                       </span>
                     </label>
 
