@@ -37,9 +37,18 @@
         focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20;
     }
 
-    .seatIndex {
-        @apply mx-1 my-1 flex h-8 items-center justify-center
+    .seatHeaderCell {
+        @apply mx-1 my-1 flex h-8 items-center justify-center gap-1
         select-none text-[11px] font-bold text-[#7F8798];
+    }
+
+    .seatHeaderDelete {
+        @apply flex h-4 w-4 shrink-0 items-center justify-center
+        rounded-full border border-[#596178] bg-[#141828] text-[10px]
+        font-bold leading-none text-[#7F8798] opacity-0 transition
+        hover:border-fuchsia-400 hover:text-fuchsia-400
+        group-hover:opacity-100
+        disabled:opacity-0! disabled:pointer-events-none;
     }
 
     .basicButtonAnimation {

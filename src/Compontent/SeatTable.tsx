@@ -1453,10 +1453,9 @@ export const SeatTable = () => {
             "bg-[#23283D] border-[#444B5F] border rounded-[16px] p-[24px] grid w-full "
           }
           style={{
-            gridTemplateColumns: `auto auto repeat(${colCount}, minmax(0, 1fr)) auto`,
+            gridTemplateColumns: `auto repeat(${colCount}, minmax(0, 1fr)) auto`,
           }}
         >
-          <div />
           <div />
           <div
             className="mb-3 flex justify-center"
@@ -1468,38 +1467,21 @@ export const SeatTable = () => {
           </div>
           <div />
 
-          <div />
-          <div className="flex items-center justify-center">
-            <button
-              type="button"
-              onClick={addRow}
-              disabled={rowCount >= MAX_ROW_COUNT}
-              title="新增一列"
-              aria-label="新增一列"
-              className="h-7 px-1.5 text-[11px] functionalButton basicButtonAnimation"
-            >
-              ＋
-            </button>
-          </div>
-          {Array.from({ length: colCount + 1 }, (_, i) => (
-            <div key={`top-${i}`} />
-          ))}
-
           {Array.from({ length: rowCount }, (_, row) => (
             <Fragment key={`row-${row}`}>
-              <div className="flex items-center justify-center">
+              <div className="seatHeaderCell group">
+                <span>{row + 1}</span>
                 <button
                   type="button"
                   onClick={() => removeRowAt(row)}
                   disabled={rowCount <= 1}
                   title={`移除第 ${row + 1} 列`}
                   aria-label={`移除第 ${row + 1} 列`}
-                  className="h-7 px-1.5 text-[11px] functionalButton basicButtonAnimation"
+                  className="seatHeaderDelete"
                 >
-                  －
+                  ×
                 </button>
               </div>
-              <div className="seatIndex">{row + 1}</div>
               {seatList
                 .slice(row * colCount, row * colCount + colCount)
                 .map((seat, col) => {
@@ -1553,11 +1535,31 @@ export const SeatTable = () => {
             </Fragment>
           ))}
 
-          <div />
-          <div />
+          <div className="flex items-center justify-center">
+            <button
+              type="button"
+              onClick={addRow}
+              disabled={rowCount >= MAX_ROW_COUNT}
+              title="新增一列"
+              aria-label="新增一列"
+              className="h-7 px-1.5 text-[11px] functionalButton basicButtonAnimation"
+            >
+              ＋
+            </button>
+          </div>
           {Array.from({ length: colCount }, (_, col) => (
-            <div key={`colIndex-${col}`} className="seatIndex">
-              {col + 1}
+            <div key={`colHeader-${col}`} className="seatHeaderCell group">
+              <span>{col + 1}</span>
+              <button
+                type="button"
+                onClick={() => removeColumnAt(col)}
+                disabled={colCount <= 1}
+                title={`移除第 ${col + 1} 欄`}
+                aria-label={`移除第 ${col + 1} 欄`}
+                className="seatHeaderDelete"
+              >
+                ×
+              </button>
             </div>
           ))}
           <div className="flex items-center justify-center">
@@ -1572,27 +1574,6 @@ export const SeatTable = () => {
               ＋
             </button>
           </div>
-
-          <div />
-          <div />
-          {Array.from({ length: colCount }, (_, col) => (
-            <div
-              key={`colRemove-${col}`}
-              className="flex items-center justify-center"
-            >
-              <button
-                type="button"
-                onClick={() => removeColumnAt(col)}
-                disabled={colCount <= 1}
-                title={`移除第 ${col + 1} 欄`}
-                aria-label={`移除第 ${col + 1} 欄`}
-                className="h-7 px-1.5 text-[11px] functionalButton basicButtonAnimation"
-              >
-                －
-              </button>
-            </div>
-          ))}
-          <div />
         </div>
         <StatusBar
           occupiedCount={seatCounts[seatStatus.occ]}
