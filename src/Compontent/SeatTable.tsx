@@ -197,7 +197,6 @@ export const SeatTable = () => {
   const [seatList, setSeatList] = useState<Seat[]>(() =>
     initialSeatLayout.seats.map((seat) => ({ ...seat })),
   );
-  const [isResizeOpen, setIsResizeOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isDeleteAllHistoryConfirming, setIsDeleteAllHistoryConfirming] =
     useState(false);
@@ -210,12 +209,6 @@ export const SeatTable = () => {
     useState(false);
   const [undoStack, setUndoStack] = useState<SeatLayout[]>([]);
   const [redoStack, setRedoStack] = useState<SeatLayout[]>([]);
-  const [requestedRowCount, setRequestedRowCount] = useState(
-    String(DEFAULT_ROW_COUNT),
-  );
-  const [requestedColCount, setRequestedColCount] = useState(
-    String(DEFAULT_COL_COUNT),
-  );
   const [importFormatMode, setImportFormatMode] =
     useState<ImportFormatMode>("join-row");
   const [importSeparator, setImportSeparator] = useState(" ");
@@ -410,41 +403,70 @@ export const SeatTable = () => {
     showOperationNotice(`已還原「${historyEntry.name}」`);
   };
 
-  const openResizeDialog = () => {
-    setRequestedRowCount(String(rowCount));
-    setRequestedColCount(String(colCount));
-    setIsResizeOpen(true);
+  const addRow = () => {
+    if (rowCount >= MAX_ROW_COUNT) return;
+    applySeatLayout(rowCount + 1, colCount, [
+      ...seatList,
+      ...createSeatList(colCount),
+    ]);
   };
 
-  const resizeSeat = (event: SubmitEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const nextColCount = Number(requestedColCount);
-    const nextRowCount = Number(requestedRowCount);
+  const removeRow = () => {
+    if (rowCount <= 1) return;
 
+    const lastRowSeats = seatList.slice((rowCount - 1) * colCount);
+    const hasAssignedSeat = lastRowSeats.some(
+      (seat) => seat.status === seatStatus.occ,
+    );
     if (
-      !Number.isInteger(nextColCount) ||
-      !Number.isInteger(nextRowCount) ||
-      nextColCount <= 0 ||
-      nextRowCount <= 0
+      hasAssignedSeat &&
+      !confirm("最後一列內有已分配學生的座位，確定要移除嗎？")
     ) {
-      alert("欄與列必須大於零");
-      return;
-    }
-    if (nextColCount > MAX_COL_COUNT) {
-      alert("輸入欄數需小於12");
-      return;
-    }
-    if (nextRowCount > MAX_ROW_COUNT) {
-      alert("輸入列數需小於30");
       return;
     }
 
     applySeatLayout(
-      nextRowCount,
-      nextColCount,
-      createSeatList(nextColCount * nextRowCount),
+      rowCount - 1,
+      colCount,
+      seatList.slice(0, (rowCount - 1) * colCount),
     );
-    setIsResizeOpen(false);
+  };
+
+  const addColumn = () => {
+    if (colCount >= MAX_COL_COUNT) return;
+
+    const nextSeats: Seat[] = [];
+    for (let row = 0; row < rowCount; row++) {
+      nextSeats.push(...seatList.slice(row * colCount, (row + 1) * colCount));
+      nextSeats.push(createSeat());
+    }
+    applySeatLayout(rowCount, colCount + 1, nextSeats);
+  };
+
+  const removeColumn = () => {
+    if (colCount <= 1) return;
+
+    const lastColumnSeats = Array.from(
+      { length: rowCount },
+      (_, row) => seatList[row * colCount + colCount - 1],
+    );
+    const hasAssignedSeat = lastColumnSeats.some(
+      (seat) => seat.status === seatStatus.occ,
+    );
+    if (
+      hasAssignedSeat &&
+      !confirm("最後一欄內有已分配學生的座位，確定要移除嗎？")
+    ) {
+      return;
+    }
+
+    const nextSeats: Seat[] = [];
+    for (let row = 0; row < rowCount; row++) {
+      nextSeats.push(
+        ...seatList.slice(row * colCount, row * colCount + colCount - 1),
+      );
+    }
+    applySeatLayout(rowCount, colCount - 1, nextSeats);
   };
 
   const changeSeatStatus = (
@@ -711,16 +733,13 @@ export const SeatTable = () => {
             {/* Button */}
             <div className="flex w-full flex-row-reverse flex-wrap px-3 text-right">
               <button
-                className="functionalButton"
+                className="functionalButton basicButtonAnimation"
                 onClick={() => setIsImportSettingsOpen(true)}
               >
                 匯入學生
               </button>
-              <button className="functionalButton" onClick={openResizeDialog}>
-                生成座位
-              </button>
               <button
-                className="functionalButton disabled:border-transparent disabled:text-gray-700"
+                className="functionalButton basicButtonAnimation"
                 onClick={clear}
                 disabled={!hasSeatChanges}
               >
@@ -729,9 +748,9 @@ export const SeatTable = () => {
               <button
                 onClick={() => setIsExportDialogOpen(true)}
                 disabled={!hasSeatChanges}
-                className="functionalButton disabled:border-transparent disabled:text-gray-700"
+                className="functionalButton basicButtonAnimation"
               >
-                匯出座位表
+                匯出座位
               </button>
             </div>
           </div>
@@ -779,126 +798,98 @@ export const SeatTable = () => {
           </div>
         </section>
 
-        <div
-          onDrop={dropFile}
-          onDragOver={(e) => {
-            e.preventDefault();
-          }}
-          className={
-            "bg-[#23283D] border-[#444B5F] border rounded-[16px] p-[24px] grid w-full "
-          }
-          style={{ gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))` }}
-        >
-          {seatList.map((seat, i) => (
-            <div
-              draggable
-              className={seat.status}
-              key={String(i)}
-              onClick={() => toggleSeatStatus(i)}
-              onDragStart={(event) => handleSeatDragStart(event, i)}
-              onDragOver={handleSeatDragOver}
-              onDragLeave={(event) =>
-                event.currentTarget.classList.remove(
-                  "border-dashed",
-                  "opacity-50",
-                )
-              }
-              onDragEnd={(event) =>
-                event.currentTarget.classList.remove("border-status-dim")
-              }
-              onDrop={(event) => handleSeatDrop(event, i)}
+        <div className="flex w-full items-stretch gap-2">
+          <div
+            onDrop={dropFile}
+            onDragOver={(e) => {
+              e.preventDefault();
+            }}
+            className={
+              "bg-[#23283D] border-[#444B5F] border rounded-[16px] p-[24px] grid flex-1 "
+            }
+            style={{
+              gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))`,
+            }}
+          >
+            {seatList.map((seat, i) => (
+              <div
+                draggable
+                className={seat.status + " basicSeat"}
+                key={String(i)}
+                onClick={() => toggleSeatStatus(i)}
+                onDragStart={(event) => handleSeatDragStart(event, i)}
+                onDragOver={handleSeatDragOver}
+                onDragLeave={(event) =>
+                  event.currentTarget.classList.remove(
+                    "border-dashed",
+                    "opacity-50",
+                  )
+                }
+                onDragEnd={(event) =>
+                  event.currentTarget.classList.remove("border-status-dim")
+                }
+                onDrop={(event) => handleSeatDrop(event, i)}
+              >
+                {seat.name}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex shrink-0 flex-col items-center justify-center gap-1.5">
+            <button
+              type="button"
+              onClick={addColumn}
+              disabled={colCount >= MAX_COL_COUNT}
+              title="新增一欄"
+              aria-label="新增一欄"
+              className="flex size-8 items-center justify-center text-sm functionalButton basicButtonAnimation"
             >
-              {seat.name}
-            </div>
-          ))}
+              +
+            </button>
+            <span className="select-none text-[11px] text-[#7F8798]">欄</span>
+            <button
+              type="button"
+              onClick={removeColumn}
+              disabled={colCount <= 1}
+              title="移除最後一欄"
+              aria-label="移除最後一欄"
+              className="flex size-8 items-center justify-center text-sm functionalButton basicButtonAnimation"
+            >
+              −
+            </button>
+          </div>
         </div>
+
+        <div className="mt-2 flex w-full items-center justify-center gap-1.5">
+          <button
+            type="button"
+            onClick={addRow}
+            disabled={rowCount >= MAX_ROW_COUNT}
+            title="新增一列"
+            aria-label="新增一列"
+            className="flex size-8 items-center justify-center text-sm functionalButton basicButtonAnimation"
+          >
+            +
+          </button>
+          <span className="select-none text-[11px] text-[#7F8798]">列</span>
+          <button
+            type="button"
+            onClick={removeRow}
+            disabled={rowCount <= 1}
+            title="移除最後一列"
+            aria-label="移除最後一列"
+            className="flex size-8 items-center justify-center text-sm functionalButton basicButtonAnimation"
+          >
+            −
+          </button>
+        </div>
+
         <StatusBar
           occupiedCount={seatCounts[seatStatus.occ]}
           availableCount={seatCounts[seatStatus.ava]}
           unavailableCount={seatCounts[seatStatus.emp]}
         />
       </div>
-
-      <Transition show={isResizeOpen}>
-        <Dialog
-          as="div"
-          className="relative z-10 focus:outline-none"
-          onClose={() => setIsResizeOpen(false)}
-        >
-          <div className="fixed inset-0 z-10 w-screen overflow-y-auto bg-black/30">
-            <div className="flex min-h-full items-center justify-center p-4">
-              <TransitionChild
-                enter="ease-out duration-300"
-                enterFrom="opacity-0 scale-95"
-                enterTo="opacity-100 scale-100"
-                leave="ease-in duration-200"
-                leaveFrom="opacity-100 scale-100"
-                leaveTo="opacity-0 scale-95"
-              >
-                <DialogPanel className="w-full max-w-md rounded-xl bg-[#23283D] p-6 shadow-xl">
-                  <DialogTitle
-                    as="h3"
-                    className="select-none text-base/7 font-medium text-[#EDF0F4]"
-                  >
-                    座位大小
-                  </DialogTitle>
-                  <form onSubmit={resizeSeat}>
-                    <label
-                      htmlFor="seat-column-count"
-                      className="select-none block text-sm font-medium leading-6 text-[#ACB4C0] my-2"
-                    >
-                      欄數量：
-                    </label>
-                    <input
-                      id="seat-column-count"
-                      name="columnCount"
-                      type="number"
-                      min={1}
-                      max={MAX_COL_COUNT}
-                      step={1}
-                      value={requestedColCount}
-                      onChange={(event) =>
-                        setRequestedColCount(event.target.value)
-                      }
-                      required
-                      autoFocus
-                      className="block w-full rounded-md border-0 p-1.5 text-gray-900 shadow-xs ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-                    />
-
-                    <label
-                      htmlFor="seat-row-count"
-                      className="select-none block text-sm font-medium leading-6 text-[#ACB4C0] my-2"
-                    >
-                      列數量：
-                    </label>
-                    <input
-                      id="seat-row-count"
-                      name="rowCount"
-                      type="number"
-                      min={1}
-                      max={MAX_ROW_COUNT}
-                      step={1}
-                      value={requestedRowCount}
-                      onChange={(event) =>
-                        setRequestedRowCount(event.target.value)
-                      }
-                      required
-                      className="block w-full rounded-md border-0 p-1.5 text-gray-900 shadow-xs ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-inset focus:ring-indigo-600 sm:text-sm sm:leading-6"
-                    />
-
-                    <button
-                      type="submit"
-                      className="flex w-full justify-center rounded-md bg-indigo-600 mt-4 px-3 py-1.5 text-sm font-semibold leading-6 text-white shadow-xs hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-                    >
-                      生成
-                    </button>
-                  </form>
-                </DialogPanel>
-              </TransitionChild>
-            </div>
-          </div>
-        </Dialog>
-      </Transition>
 
       <Transition show={isImportSettingsOpen}>
         <Dialog
