@@ -123,6 +123,10 @@ const SEAT_MENU_PADDING = 8;
 const MAX_RESHUFFLE_ATTEMPT = 8;
 const SEAT_SETTLE_STEP = 40;
 const SEAT_SETTLE_MAX_DELAY = 700;
+// 拖曳時用自訂 MIME 型別區分座位／整列／整欄，dragover 只能讀到 types。
+const SEAT_DRAG_TYPE = "application/x-seat-index";
+const ROW_DRAG_TYPE = "application/x-seat-row";
+const COLUMN_DRAG_TYPE = "application/x-seat-column";
 const SEAT_SETTLE_DURATION = 260;
 
 const DEFAULT_IMPORT_SETTINGS: ImportSettings = {
@@ -1076,6 +1080,51 @@ export const SeatTable = () => {
       nextSeats[sourceID],
     ];
     applySeatLayout(rowCount, colCount, nextSeats);
+    playSettleAnimation([sourceID, targetID]);
+  };
+
+  const exchangeRows = (sourceRow: number, targetRow: number) => {
+    if (!Number.isInteger(sourceRow) || sourceRow === targetRow) return;
+    if (sourceRow < 0 || sourceRow >= rowCount) return;
+    if (targetRow < 0 || targetRow >= rowCount) return;
+
+    const nextSeats = [...seatList];
+    const settleOrder: number[] = [];
+    for (let col = 0; col < colCount; col++) {
+      const sourceIndex = sourceRow * colCount + col;
+      const targetIndex = targetRow * colCount + col;
+      [nextSeats[sourceIndex], nextSeats[targetIndex]] = [
+        nextSeats[targetIndex],
+        nextSeats[sourceIndex],
+      ];
+      settleOrder.push(sourceIndex, targetIndex);
+    }
+    applySeatLayout(rowCount, colCount, nextSeats);
+    showOperationNotice(`已交換第 ${sourceRow + 1} 列與第 ${targetRow + 1} 列`);
+    playSettleAnimation(settleOrder);
+  };
+
+  const exchangeColumns = (sourceColumn: number, targetColumn: number) => {
+    if (!Number.isInteger(sourceColumn) || sourceColumn === targetColumn) return;
+    if (sourceColumn < 0 || sourceColumn >= colCount) return;
+    if (targetColumn < 0 || targetColumn >= colCount) return;
+
+    const nextSeats = [...seatList];
+    const settleOrder: number[] = [];
+    for (let row = 0; row < rowCount; row++) {
+      const sourceIndex = row * colCount + sourceColumn;
+      const targetIndex = row * colCount + targetColumn;
+      [nextSeats[sourceIndex], nextSeats[targetIndex]] = [
+        nextSeats[targetIndex],
+        nextSeats[sourceIndex],
+      ];
+      settleOrder.push(sourceIndex, targetIndex);
+    }
+    applySeatLayout(rowCount, colCount, nextSeats);
+    showOperationNotice(
+      `已交換第 ${sourceColumn + 1} 欄與第 ${targetColumn + 1} 欄`,
+    );
+    playSettleAnimation(settleOrder);
   };
 
   const parseExcel = (file: File) => {
@@ -1136,6 +1185,8 @@ export const SeatTable = () => {
   };
 
   const handleSeatDragOver = (event: DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes(SEAT_DRAG_TYPE)) return;
+
     event.preventDefault();
     event.currentTarget.classList.add("border-dashed", "opacity-50");
   };
@@ -1144,7 +1195,8 @@ export const SeatTable = () => {
     event: DragEvent<HTMLDivElement>,
     seatIndex: number,
   ) => {
-    event.dataTransfer.setData("sourceID", String(seatIndex));
+    event.dataTransfer.setData(SEAT_DRAG_TYPE, String(seatIndex));
+    event.dataTransfer.effectAllowed = "move";
     event.currentTarget.classList.add("border-status-dim");
   };
 
@@ -1154,11 +1206,51 @@ export const SeatTable = () => {
   ) => {
     event.preventDefault();
     event.currentTarget.classList.remove("border-dashed", "opacity-50");
-    const sourceID = event.dataTransfer.getData("sourceID");
+    const sourceID = event.dataTransfer.getData(SEAT_DRAG_TYPE);
     if (!sourceID) return;
 
     event.stopPropagation();
     exchange(Number(sourceID), targetIndex);
+  };
+
+  const handleHeaderDragStart = (
+    event: DragEvent<HTMLDivElement>,
+    dragType: string,
+    index: number,
+  ) => {
+    event.dataTransfer.setData(dragType, String(index));
+    event.dataTransfer.effectAllowed = "move";
+    event.currentTarget.classList.add("seatHeaderDragging");
+  };
+
+  const handleHeaderDragOver = (
+    event: DragEvent<HTMLDivElement>,
+    dragType: string,
+  ) => {
+    // 只接受同一軸向的整列／整欄拖曳，避免座位或檔案拖曳誤觸。
+    if (!event.dataTransfer.types.includes(dragType)) return;
+
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    event.currentTarget.classList.add("seatHeaderDropTarget");
+  };
+
+  const handleHeaderDrop = (
+    event: DragEvent<HTMLDivElement>,
+    dragType: string,
+    targetIndex: number,
+  ) => {
+    event.currentTarget.classList.remove("seatHeaderDropTarget");
+    const sourceIndex = event.dataTransfer.getData(dragType);
+    if (!sourceIndex) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (dragType === ROW_DRAG_TYPE) {
+      exchangeRows(Number(sourceIndex), targetIndex);
+    } else {
+      exchangeColumns(Number(sourceIndex), targetIndex);
+    }
   };
 
   const dropFile = (event: DragEvent<HTMLDivElement>) => {
@@ -1277,7 +1369,7 @@ export const SeatTable = () => {
               type="button"
               onClick={applyArrangement}
               disabled={isArrangeBlocked}
-              className="functionalButton basicButtonAnimation shrink-0 border-fuchsia-400"
+              className="functionalButton basicButtonAnimation shrink-0 border-fuchsia-400 disabled:border-transparent"
             >
               {arrangeMode === "random" ? "再抽一次" : "套用排序"}
             </button>
@@ -1469,7 +1561,29 @@ export const SeatTable = () => {
 
           {Array.from({ length: rowCount }, (_, row) => (
             <Fragment key={`row-${row}`}>
-              <div className="seatHeaderCell group">
+              <div
+                className={
+                  "seatHeaderCell group min-w-12" +
+                  (rowCount > 1 ? " seatHeaderDraggable" : "")
+                }
+                draggable={rowCount > 1}
+                title={rowCount > 1 ? "拖曳列號可與其他列互換" : undefined}
+                onDragStart={(event) =>
+                  handleHeaderDragStart(event, ROW_DRAG_TYPE, row)
+                }
+                onDragOver={(event) =>
+                  handleHeaderDragOver(event, ROW_DRAG_TYPE)
+                }
+                onDragLeave={(event) =>
+                  event.currentTarget.classList.remove("seatHeaderDropTarget")
+                }
+                onDragEnd={(event) =>
+                  event.currentTarget.classList.remove("seatHeaderDragging")
+                }
+                onDrop={(event) => handleHeaderDrop(event, ROW_DRAG_TYPE, row)}
+              >
+                {/* 與刪除鈕等寬的佔位，數字才會落在格子正中央。 */}
+                <span aria-hidden className="size-4 shrink-0" />
                 <span>{row + 1}</span>
                 <button
                   type="button"
@@ -1548,7 +1662,32 @@ export const SeatTable = () => {
             </button>
           </div>
           {Array.from({ length: colCount }, (_, col) => (
-            <div key={`colHeader-${col}`} className="seatHeaderCell group">
+            <div
+              key={`colHeader-${col}`}
+              className={
+                "seatHeaderCell group" +
+                (colCount > 1 ? " seatHeaderDraggable" : "")
+              }
+              draggable={colCount > 1}
+              title={colCount > 1 ? "拖曳欄號可與其他欄互換" : undefined}
+              onDragStart={(event) =>
+                handleHeaderDragStart(event, COLUMN_DRAG_TYPE, col)
+              }
+              onDragOver={(event) =>
+                handleHeaderDragOver(event, COLUMN_DRAG_TYPE)
+              }
+              onDragLeave={(event) =>
+                event.currentTarget.classList.remove("seatHeaderDropTarget")
+              }
+              onDragEnd={(event) =>
+                event.currentTarget.classList.remove("seatHeaderDragging")
+              }
+              onDrop={(event) =>
+                handleHeaderDrop(event, COLUMN_DRAG_TYPE, col)
+              }
+            >
+              {/* 與刪除鈕等寬的佔位，數字才會落在格子正中央。 */}
+              <span aria-hidden className="size-4 shrink-0" />
               <span>{col + 1}</span>
               <button
                 type="button"
