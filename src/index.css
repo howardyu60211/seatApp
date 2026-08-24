@@ -97,6 +97,123 @@
     .formHint {
         @apply mt-1 block;
     }
+
+    /* --- 對話框骨架 --- */
+    .dialogRoot {
+        @apply relative z-10 focus:outline-none;
+    }
+
+    .dialogBackdrop {
+        @apply fixed inset-0 z-10 w-screen overflow-y-auto bg-black/30;
+    }
+
+    .dialogScroll {
+        @apply flex min-h-full items-center justify-center p-4;
+    }
+
+    /* 寬度由使用端補上 max-w-*。 */
+    .dialogPanel {
+        @apply w-full rounded-xl bg-[#23283D] p-6 shadow-xl;
+    }
+
+    .dialogTitle {
+        @apply text-base font-medium text-[#EDF0F4];
+    }
+
+    .dialogActions {
+        @apply mt-6 flex justify-end gap-2;
+    }
+
+    /* --- 對話框按鈕：.dialogButton 配一個色調類別 --- */
+    .dialogButton {
+        @apply rounded-lg px-3 py-2 text-xs font-bold transition;
+    }
+
+    .dialogButtonGhost {
+        @apply text-[#ACB4C0] hover:bg-white/5 hover:text-[#EDF0F4];
+    }
+
+    .dialogButtonPrimary {
+        @apply border border-fuchsia-400 bg-fuchsia-400/10 text-fuchsia-300
+        hover:bg-fuchsia-400/20
+        focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-400;
+    }
+
+    .dialogButtonOutline {
+        @apply border border-fuchsia-400 text-fuchsia-400
+        hover:bg-fuchsia-400/10
+        focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-400;
+    }
+
+    .dialogButtonDanger {
+        @apply border border-red-400 bg-red-400/10 text-red-300
+        hover:bg-red-400/20
+        focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400;
+    }
+
+    .dialogButtonDangerOutline {
+        @apply border border-red-400/70 text-red-400
+        hover:bg-red-400/10
+        focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400;
+    }
+
+    /* --- 表單欄位 --- */
+    .fieldLabel {
+        @apply mb-1.5 block text-xs font-medium text-[#ACB4C0];
+    }
+
+    .fieldNote {
+        @apply mt-1 text-xs text-[#ACB4C0];
+    }
+
+    /* 高度與底色由使用端補上（py-2 或 h-10、bg-*）。 */
+    .textField {
+        @apply block w-full rounded-lg border border-[#596178] px-3
+        text-sm text-[#EDF0F4] outline-none transition
+        placeholder:text-[#6F778A]
+        focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20;
+    }
+
+    .checkboxField {
+        @apply size-4 accent-fuchsia-500;
+    }
+
+    /* 底色與游標由使用端補上。 */
+    .optionCard {
+        @apply flex items-center gap-3 rounded-lg
+        border border-[#444B5F] px-3 py-2.5;
+    }
+
+    .optionTitle {
+        @apply block text-sm text-[#EDF0F4];
+    }
+
+    /* --- 版面區塊 --- */
+    .panelCard {
+        @apply w-full rounded-[14px] border border-[#444B5F] bg-[#1C2133] p-4;
+    }
+
+    /* 欄數由行內 style 的 gridTemplateColumns 決定。 */
+    .seatGrid {
+        @apply grid w-full rounded-[16px] border border-[#444B5F] bg-[#23283D] p-[24px];
+    }
+
+    .podiumBadge {
+        @apply w-[45%] min-w-[140px] select-none rounded-lg
+        border-2 border-fuchsia-400 bg-[#141828] py-1.5
+        text-center text-xs font-bold text-fuchsia-300;
+    }
+
+    .seatMenu {
+        @apply fixed z-40 overflow-hidden rounded-lg
+        border border-[#444B5F] bg-[#1C2133] py-1 shadow-2xl;
+    }
+
+    .operationToast {
+        @apply fixed right-5 bottom-5 z-50 flex max-w-sm items-center gap-3
+        rounded-xl border border-green-400/30 bg-[#1C2133]/95 px-4 py-3
+        text-sm font-medium text-[#EDF0F4] shadow-2xl backdrop-blur;
+    }
 }
 
 .seatSettling {

@@ -1346,7 +1346,7 @@ export const SeatTable = () => {
 
         <section
           aria-label="座位排序"
-          className="mb-3 w-full rounded-[14px] border border-[#444B5F] bg-[#1C2133] p-4"
+          className="panelCard mb-3"
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
@@ -1377,7 +1377,7 @@ export const SeatTable = () => {
 
           <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <label className="block">
-              <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+              <span className="fieldLabel">
                 排序方式
               </span>
               <select
@@ -1399,7 +1399,7 @@ export const SeatTable = () => {
 
             {arrangeMode === "exam" && (
               <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                <span className="fieldLabel">
                   座位圖樣
                 </span>
                 <select
@@ -1426,7 +1426,7 @@ export const SeatTable = () => {
             {arrangeMode === "numeric" && (
               <>
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                  <span className="fieldLabel">
                     數值順序
                   </span>
                   <select
@@ -1447,7 +1447,7 @@ export const SeatTable = () => {
                 </label>
 
                 <label className="block">
-                  <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                  <span className="fieldLabel">
                     填入方式
                   </span>
                   <select
@@ -1470,17 +1470,17 @@ export const SeatTable = () => {
             )}
 
             {arrangeMode !== "random" && (
-              <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#444B5F] bg-[#141828] px-3 py-2.5 sm:col-span-3">
+              <label className="optionCard cursor-pointer bg-[#141828] sm:col-span-3">
                 <input
                   type="checkbox"
                   checked={randomizeWithinGroup}
                   onChange={(event) =>
                     setRandomizeWithinGroup(event.target.checked)
                   }
-                  className="size-4 accent-fuchsia-500"
+                  className="checkboxField"
                 />
                 <span>
-                  <span className="block text-sm text-[#EDF0F4]">
+                  <span className="optionTitle">
                     群內隨機排序
                   </span>
                   <span className="block hintText">
@@ -1496,7 +1496,7 @@ export const SeatTable = () => {
 
         <section
           aria-label="座位收藏與紀錄"
-          className="mb-3 w-full rounded-[14px] border border-[#444B5F] bg-[#1C2133] p-4"
+          className="panelCard mb-3"
         >
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <form
@@ -1504,7 +1504,7 @@ export const SeatTable = () => {
               className="flex min-w-0 flex-1 items-end gap-2"
             >
               <label className="min-w-0 flex-1">
-                <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                <span className="fieldLabel">
                   收藏名稱
                 </span>
                 <input
@@ -1514,7 +1514,7 @@ export const SeatTable = () => {
                   onChange={(event) => setFavoriteName(event.target.value)}
                   placeholder="例如：三年甲班期中座位"
                   required
-                  className="block h-10 w-full rounded-lg border border-[#596178] bg-[#23283D] px-3 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+                  className="textField h-10 bg-[#23283D]"
                 />
               </label>
               <button
@@ -1541,9 +1541,7 @@ export const SeatTable = () => {
           onDragOver={(e) => {
             e.preventDefault();
           }}
-          className={
-            "bg-[#23283D] border-[#444B5F] border rounded-[16px] p-[24px] grid w-full "
-          }
+          className="seatGrid"
           style={{
             gridTemplateColumns: `auto repeat(${colCount}, minmax(0, 1fr)) auto`,
           }}
@@ -1553,7 +1551,7 @@ export const SeatTable = () => {
             className="mb-3 flex justify-center"
             style={{ gridColumn: `span ${colCount}` }}
           >
-            <div className="w-[45%] min-w-[140px] select-none rounded-lg border-2 border-fuchsia-400 bg-[#141828] py-1.5 text-center text-xs font-bold text-fuchsia-300">
+            <div className="podiumBadge">
               講臺
             </div>
           </div>
@@ -1724,11 +1722,11 @@ export const SeatTable = () => {
       <Transition show={isImportSettingsOpen}>
         <Dialog
           as="div"
-          className="relative z-10 focus:outline-none"
+          className="dialogRoot"
           onClose={() => setIsImportSettingsOpen(false)}
         >
-          <div className="fixed inset-0 z-10 w-screen overflow-y-auto bg-black/30">
-            <div className="flex min-h-full items-center justify-center p-4">
+          <div className="dialogBackdrop">
+            <div className="dialogScroll">
               <TransitionChild
                 enter="ease-out duration-200"
                 enterFrom="opacity-0 scale-95"
@@ -1737,14 +1735,14 @@ export const SeatTable = () => {
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <DialogPanel className="w-full max-w-2xl rounded-xl bg-[#23283D] p-6 shadow-xl">
+                <DialogPanel className="dialogPanel max-w-2xl">
                   <DialogTitle
                     as="h3"
-                    className="text-base font-medium text-[#EDF0F4]"
+                    className="dialogTitle"
                   >
                     匯入學生設定
                   </DialogTitle>
-                  <p className="mt-1 text-xs text-[#ACB4C0]">
+                  <p className="fieldNote">
                     設定 XLSX 資料的組合方式，再選擇要匯入的檔案。
                   </p>
 
@@ -1759,7 +1757,7 @@ export const SeatTable = () => {
 
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                         <label className="block">
-                          <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                          <span className="fieldLabel">
                             方式
                           </span>
                           <select
@@ -1780,7 +1778,7 @@ export const SeatTable = () => {
 
                         {importFormatMode === "selected-columns" && (
                           <label className="block">
-                            <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                            <span className="fieldLabel">
                               欄位
                             </span>
                             <input
@@ -1791,7 +1789,7 @@ export const SeatTable = () => {
                                 setImportColumns(event.target.value)
                               }
                               placeholder="例如：1,2,4"
-                              className="block w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+                              className="textField bg-[#1C2133] py-2"
                             />
                             <span className="formHint hintText">
                               Excel 的 A 欄是第 1 欄。
@@ -1800,7 +1798,7 @@ export const SeatTable = () => {
                         )}
 
                         <label className="block">
-                          <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                          <span className="fieldLabel">
                             分隔字元
                           </span>
                           <input
@@ -1811,7 +1809,7 @@ export const SeatTable = () => {
                               setImportSeparator(event.target.value)
                             }
                             placeholder="留空代表直接相接"
-                            className="block w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+                            className="textField bg-[#1C2133] py-2"
                           />
                           <span className="formHint hintText">
                             目前：{separatorDescription}
@@ -1834,7 +1832,7 @@ export const SeatTable = () => {
 
                       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                         <label className="block">
-                          <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                          <span className="fieldLabel">
                             方式
                           </span>
                           <select
@@ -1863,7 +1861,7 @@ export const SeatTable = () => {
 
                         {importTagSource === "column" && (
                           <label className="block">
-                            <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                            <span className="fieldLabel">
                               欄位
                             </span>
                             <input
@@ -1874,7 +1872,7 @@ export const SeatTable = () => {
                                 setImportTagColumn(event.target.value)
                               }
                               placeholder="例如：3"
-                              className="block w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+                              className="textField bg-[#1C2133] py-2"
                             />
                             <span className="formHint hintText">
                               Excel 的 A 欄是第 1 欄。
@@ -1887,17 +1885,17 @@ export const SeatTable = () => {
                     <div className="h-px bg-[#444B5F]" />
 
                     <div className="grid grid-cols-1 gap-4">
-                      <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#444B5F] bg-[#1C2133] px-3 py-2.5">
+                      <label className="optionCard cursor-pointer bg-[#1C2133]">
                         <input
                           type="checkbox"
                           checked={skipFirstRow}
                           onChange={(event) =>
                             setSkipFirstRow(event.target.checked)
                           }
-                          className="size-4 accent-fuchsia-500"
+                          className="checkboxField"
                         />
                         <span>
-                          <span className="block text-sm text-[#EDF0F4]">
+                          <span className="optionTitle">
                             略過第一列
                           </span>
                           <span className="block hintText">
@@ -1920,18 +1918,18 @@ export const SeatTable = () => {
                     </div>
                   </div>
 
-                  <div className="mt-6 flex justify-end gap-2">
+                  <div className="dialogActions">
                     <button
                       type="button"
                       onClick={() => setIsImportSettingsOpen(false)}
-                      className="rounded-lg px-3 py-2 text-xs font-bold text-[#ACB4C0] transition hover:bg-white/5 hover:text-[#EDF0F4]"
+                      className="dialogButton dialogButtonGhost"
                     >
                       取消
                     </button>
                     <button
                       type="button"
                       onClick={confirmImport}
-                      className="rounded-lg border border-fuchsia-400 bg-fuchsia-400/10 px-3 py-2 text-xs font-bold text-fuchsia-300 transition hover:bg-fuchsia-400/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-400"
+                      className="dialogButton dialogButtonPrimary"
                     >
                       選擇 XLSX 檔案
                     </button>
@@ -1946,11 +1944,11 @@ export const SeatTable = () => {
       <Transition show={isExportDialogOpen}>
         <Dialog
           as="div"
-          className="relative z-10 focus:outline-none"
+          className="dialogRoot"
           onClose={() => setIsExportDialogOpen(false)}
         >
-          <div className="fixed inset-0 z-10 w-screen overflow-y-auto bg-black/30">
-            <div className="flex min-h-full items-center justify-center p-4">
+          <div className="dialogBackdrop">
+            <div className="dialogScroll">
               <TransitionChild
                 enter="ease-out duration-200"
                 enterFrom="opacity-0 scale-95"
@@ -1959,16 +1957,16 @@ export const SeatTable = () => {
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <DialogPanel className="w-full max-w-md rounded-xl bg-[#23283D] p-6 shadow-xl">
+                <DialogPanel className="dialogPanel max-w-md">
                   <DialogTitle
                     as="h3"
-                    className="text-base font-medium text-[#EDF0F4]"
+                    className="dialogTitle"
                   >
                     匯出座位表
                   </DialogTitle>
 
                   <fieldset className="mt-5">
-                    <legend className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                    <legend className="fieldLabel">
                       匯出格式
                     </legend>
                     <div className="grid grid-cols-3 gap-2">
@@ -2004,7 +2002,7 @@ export const SeatTable = () => {
                   ) : (
                     <div className="mt-4 space-y-4">
                       <label className="block">
-                        <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                        <span className="fieldLabel">
                           匯出標題
                         </span>
                         <input
@@ -2015,24 +2013,24 @@ export const SeatTable = () => {
                             setExportTitle(event.target.value)
                           }
                           placeholder="學生座位表"
-                          className="block w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 py-2 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+                          className="textField bg-[#1C2133] py-2"
                         />
                         <span className="formHint hintText">
                           留空時使用「學生座位表」。
                         </span>
                       </label>
 
-                      <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#444B5F] bg-[#1C2133] px-3 py-2.5">
+                      <label className="optionCard cursor-pointer bg-[#1C2133]">
                         <input
                           type="checkbox"
                           checked={showExportPodium}
                           onChange={(event) =>
                             setShowExportPodium(event.target.checked)
                           }
-                          className="size-4 accent-fuchsia-500"
+                          className="checkboxField"
                         />
                         <span>
-                          <span className="block text-sm text-[#EDF0F4]">
+                          <span className="optionTitle">
                             列印講臺
                           </span>
                           <span className="block hintText">
@@ -2041,17 +2039,17 @@ export const SeatTable = () => {
                         </span>
                       </label>
 
-                      <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-[#444B5F] bg-[#1C2133] px-3 py-2.5">
+                      <label className="optionCard cursor-pointer bg-[#1C2133]">
                         <input
                           type="checkbox"
                           checked={showExportIndex}
                           onChange={(event) =>
                             setShowExportIndex(event.target.checked)
                           }
-                          className="size-4 accent-fuchsia-500"
+                          className="checkboxField"
                         />
                         <span>
-                          <span className="block text-sm text-[#EDF0F4]">
+                          <span className="optionTitle">
                             顯示列欄編號
                           </span>
                           <span className="block hintText">
@@ -2062,7 +2060,7 @@ export const SeatTable = () => {
 
                       <label
                         className={
-                          "flex items-center gap-3 rounded-lg border border-[#444B5F] bg-[#1C2133] px-3 py-2.5 " +
+                          "optionCard bg-[#1C2133] " +
                           (showExportIndex
                             ? "cursor-pointer"
                             : "cursor-not-allowed opacity-50")
@@ -2075,10 +2073,10 @@ export const SeatTable = () => {
                           onChange={(event) =>
                             setMirrorExportIndex(event.target.checked)
                           }
-                          className="size-4 accent-fuchsia-500 disabled:cursor-not-allowed"
+                          className="checkboxField disabled:cursor-not-allowed"
                         />
                         <span>
-                          <span className="block text-sm text-[#EDF0F4]">
+                          <span className="optionTitle">
                             鏡像編號
                           </span>
                           <span className="block hintText">
@@ -2089,18 +2087,18 @@ export const SeatTable = () => {
                     </div>
                   )}
 
-                  <div className="mt-6 flex justify-end gap-2">
+                  <div className="dialogActions">
                     <button
                       type="button"
                       onClick={() => setIsExportDialogOpen(false)}
-                      className="rounded-lg px-3 py-2 text-xs font-bold text-[#ACB4C0] transition hover:bg-white/5 hover:text-[#EDF0F4]"
+                      className="dialogButton dialogButtonGhost"
                     >
                       取消
                     </button>
                     <button
                       type="button"
                       onClick={confirmExport}
-                      className="rounded-lg border border-fuchsia-400 bg-fuchsia-400/10 px-3 py-2 text-xs font-bold text-fuchsia-300 transition hover:bg-fuchsia-400/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-400"
+                      className="dialogButton dialogButtonPrimary"
                     >
                       確認匯出
                     </button>
@@ -2115,11 +2113,11 @@ export const SeatTable = () => {
       <Transition show={isHistoryOpen}>
         <Dialog
           as="div"
-          className="relative z-10 focus:outline-none"
+          className="dialogRoot"
           onClose={closeSeatHistory}
         >
-          <div className="fixed inset-0 z-10 w-screen overflow-y-auto bg-black/30">
-            <div className="flex min-h-full items-center justify-center p-4">
+          <div className="dialogBackdrop">
+            <div className="dialogScroll">
               <TransitionChild
                 enter="ease-out duration-300"
                 enterFrom="opacity-0 scale-95"
@@ -2128,7 +2126,7 @@ export const SeatTable = () => {
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <DialogPanel className="w-full max-w-xl rounded-xl bg-[#23283D] p-6 shadow-xl">
+                <DialogPanel className="dialogPanel max-w-xl">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <DialogTitle
@@ -2137,7 +2135,7 @@ export const SeatTable = () => {
                       >
                         座位紀錄
                       </DialogTitle>
-                      <p className="mt-1 text-xs text-[#ACB4C0]">
+                      <p className="fieldNote">
                         顯示你主動收藏的座位配置，最多 {MAX_HISTORY_COUNT} 筆。
                       </p>
                     </div>
@@ -2149,7 +2147,7 @@ export const SeatTable = () => {
                             onClick={() =>
                               setIsDeleteAllHistoryConfirming(true)
                             }
-                            className="rounded-lg border border-red-400/70 px-3 py-1.5 text-sm font-medium text-red-400 transition hover:bg-red-400/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400"
+                            className="dialogButton dialogButtonDangerOutline py-1.5 text-sm font-medium"
                           >
                             全部刪除
                           </button>
@@ -2157,7 +2155,7 @@ export const SeatTable = () => {
                       <button
                         type="button"
                         onClick={closeSeatHistory}
-                        className="rounded-lg px-3 py-1.5 text-sm text-[#ACB4C0] transition hover:bg-white/5 hover:text-[#EDF0F4]"
+                        className="dialogButton dialogButtonGhost py-1.5 text-sm font-normal"
                       >
                         關閉
                       </button>
@@ -2172,21 +2170,21 @@ export const SeatTable = () => {
                       <p className="text-sm font-medium text-[#EDF0F4]">
                         刪除全部 {seatHistory.length} 筆座位紀錄？
                       </p>
-                      <p className="mt-1 text-xs text-[#ACB4C0]">
+                      <p className="fieldNote">
                         刪除後無法復原，但不會影響目前畫面上的座位。
                       </p>
                       <div className="mt-4 flex justify-end gap-2">
                         <button
                           type="button"
                           onClick={() => setIsDeleteAllHistoryConfirming(false)}
-                          className="rounded-lg px-3 py-2 text-xs font-bold text-[#ACB4C0] transition hover:bg-white/5 hover:text-[#EDF0F4]"
+                          className="dialogButton dialogButtonGhost"
                         >
                           取消
                         </button>
                         <button
                           type="button"
                           onClick={deleteAllSeatHistory}
-                          className="rounded-lg border border-red-400 bg-red-400/10 px-3 py-2 text-xs font-bold text-red-300 transition hover:bg-red-400/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400"
+                          className="dialogButton dialogButtonDanger"
                         >
                           確認全部刪除
                         </button>
@@ -2227,14 +2225,14 @@ export const SeatTable = () => {
                               <button
                                 type="button"
                                 onClick={() => deleteSeatHistory(historyEntry)}
-                                className="rounded-lg border border-red-400/70 px-3 py-2 text-xs font-bold text-red-400 transition hover:bg-red-400/10 active:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-400"
+                                className="dialogButton dialogButtonDangerOutline active:opacity-85"
                               >
                                 刪除
                               </button>
                               <button
                                 type="button"
                                 onClick={() => restoreSeatLayout(historyEntry)}
-                                className="rounded-lg border border-fuchsia-400 px-3 py-2 text-xs font-bold text-fuchsia-400 transition hover:bg-fuchsia-400/10 active:opacity-85 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-400"
+                                className="dialogButton dialogButtonOutline active:opacity-85"
                               >
                                 還原
                               </button>
@@ -2260,7 +2258,7 @@ export const SeatTable = () => {
             top: `${seatMenu.y}px`,
             width: `${SEAT_MENU_WIDTH}px`,
           }}
-          className="fixed z-40 overflow-hidden rounded-lg border border-[#444B5F] bg-[#1C2133] py-1 shadow-2xl"
+          className="seatMenu"
           onPointerDown={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
@@ -2320,11 +2318,11 @@ export const SeatTable = () => {
       <Transition show={renameSeatIndex !== null}>
         <Dialog
           as="div"
-          className="relative z-10 focus:outline-none"
+          className="dialogRoot"
           onClose={closeSeatRename}
         >
-          <div className="fixed inset-0 z-10 w-screen overflow-y-auto bg-black/30">
-            <div className="flex min-h-full items-center justify-center p-4">
+          <div className="dialogBackdrop">
+            <div className="dialogScroll">
               <TransitionChild
                 enter="ease-out duration-200"
                 enterFrom="opacity-0 scale-95"
@@ -2333,20 +2331,20 @@ export const SeatTable = () => {
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <DialogPanel className="w-full max-w-sm rounded-xl bg-[#23283D] p-6 shadow-xl">
+                <DialogPanel className="dialogPanel max-w-sm">
                   <form onSubmit={submitSeatRename}>
                     <DialogTitle
                       as="h3"
-                      className="text-base font-medium text-[#EDF0F4]"
+                      className="dialogTitle"
                     >
                       修改座位文字
                     </DialogTitle>
-                    <p className="mt-1 text-xs text-[#ACB4C0]">
+                    <p className="fieldNote">
                       {renameSeatLabel}
                     </p>
 
                     <label className="mt-5 block">
-                      <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                      <span className="fieldLabel">
                         座位文字
                       </span>
                       <input
@@ -2356,7 +2354,7 @@ export const SeatTable = () => {
                         maxLength={40}
                         onChange={(event) => setRenameValue(event.target.value)}
                         placeholder="例如：王小明"
-                        className="block h-10 w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+                        className="textField h-10 bg-[#1C2133]"
                       />
                       <span className="formHint hintText">
                         留空代表清除學生，座位會回到可分配狀態。
@@ -2364,7 +2362,7 @@ export const SeatTable = () => {
                     </label>
 
                     <label className="mt-4 block">
-                      <span className="mb-1.5 block text-xs font-medium text-[#ACB4C0]">
+                      <span className="fieldLabel">
                         排序依據
                       </span>
                       <input
@@ -2375,24 +2373,24 @@ export const SeatTable = () => {
                           setRenameTagValue(event.target.value)
                         }
                         placeholder="例如：男、A 組、85"
-                        className="block h-10 w-full rounded-lg border border-[#596178] bg-[#1C2133] px-3 text-sm text-[#EDF0F4] outline-none transition placeholder:text-[#6F778A] focus:border-fuchsia-400 focus:ring-2 focus:ring-fuchsia-400/20"
+                        className="textField h-10 bg-[#1C2133]"
                       />
                       <span className="formHint hintText">
                         顯示在姓名後方，座位排序時會依它分類或比大小。
                       </span>
                     </label>
 
-                    <div className="mt-6 flex justify-end gap-2">
+                    <div className="dialogActions">
                       <button
                         type="button"
                         onClick={closeSeatRename}
-                        className="rounded-lg px-3 py-2 text-xs font-bold text-[#ACB4C0] transition hover:bg-white/5 hover:text-[#EDF0F4]"
+                        className="dialogButton dialogButtonGhost"
                       >
                         取消
                       </button>
                       <button
                         type="submit"
-                        className="rounded-lg border border-fuchsia-400 bg-fuchsia-400/10 px-3 py-2 text-xs font-bold text-fuchsia-300 transition hover:bg-fuchsia-400/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-fuchsia-400"
+                        className="dialogButton dialogButtonPrimary"
                       >
                         儲存
                       </button>
@@ -2417,7 +2415,7 @@ export const SeatTable = () => {
         <div
           role="status"
           aria-live="polite"
-          className="fixed right-5 bottom-5 z-50 flex max-w-sm items-center gap-3 rounded-xl border border-green-400/30 bg-[#1C2133]/95 px-4 py-3 text-sm font-medium text-[#EDF0F4] shadow-2xl backdrop-blur"
+          className="operationToast"
         >
           <span
             aria-hidden="true"
