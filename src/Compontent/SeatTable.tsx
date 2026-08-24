@@ -81,6 +81,19 @@ interface ImportSettings {
   tagColumn: string;
 }
 
+/** 讀進來的單一工作表，rows 是 sheet_to_json 的二維陣列。 */
+interface ImportSheet {
+  name: string;
+  rows: unknown[][];
+}
+
+/** 已讀檔、等待使用者在預覽視窗確認的匯入來源。 */
+interface ImportSource {
+  fileName: string;
+  sheets: ImportSheet[];
+  sheetName: string;
+}
+
 const IMPORT_TAG_SOURCE_LABELS: Record<ImportTagSource, string> = {
   none: "不記憶",
   order: "依名單順序",
@@ -104,7 +117,7 @@ const ARRANGE_MODE_HINTS: Record<ArrangeMode, string> = {
     "再抽一次會把未釘選的學生重新隨機分配；已釘選（名字前有圖釘）的座位會留在原位。",
   category:
     "依匯入時記住的排序依據分類，讓相鄰座位盡量落在不同類別，座位之間不留空白。",
-  exam: "先依座位圖樣留出空位，再讓相鄰座位盡量落在不同類別，適合安排考試座位。",
+  exam: "先依座位圖樣留出空位，再把學生填進剩下的座位，適合安排考試座位。",
   numeric:
     "依排序依據的數值大小，照選定的填入方式依序排入座位；沒有數值的學生會排在最後。",
 };
@@ -128,6 +141,8 @@ const SEAT_DRAG_TYPE = "application/x-seat-index";
 const ROW_DRAG_TYPE = "application/x-seat-row";
 const COLUMN_DRAG_TYPE = "application/x-seat-column";
 const SEAT_SETTLE_DURATION = 260;
+const MAX_IMPORT_PREVIEW_ROW = 3;
+const MAX_IMPORT_PREVIEW_COLUMN = 26;
 
 const DEFAULT_IMPORT_SETTINGS: ImportSettings = {
   formatMode: "join-row",
@@ -358,6 +373,7 @@ export const SeatTable = () => {
   );
   const [arrangeMode, setArrangeMode] = useState<ArrangeMode>("random");
   const [examPattern, setExamPattern] = useState<ExamPattern>("column-gap");
+  const [examSeparateCategories, setExamSeparateCategories] = useState(true);
   const [numericOrder, setNumericOrder] = useState<NumericOrder>("asc");
   const [numericGrouping, setNumericGrouping] =
     useState<NumericGrouping>("row-major");
@@ -366,7 +382,8 @@ export const SeatTable = () => {
   const [showExportPodium, setShowExportPodium] = useState(false);
   const [showExportIndex, setShowExportIndex] = useState(true);
   const [mirrorExportIndex, setMirrorExportIndex] = useState(false);
-  const [isImportSettingsOpen, setIsImportSettingsOpen] = useState(false);
+  const [importSource, setImportSource] = useState<ImportSource | null>(null);
+  const [isImportBusy, setIsImportBusy] = useState(false);
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState<ExportFormat>("xlsx");
   const [seatMenu, setSeatMenu] = useState<SeatMenuState | null>(null);
@@ -419,16 +436,23 @@ export const SeatTable = () => {
     return String(row[parsedTagColumn.column - 1] ?? "").trim();
   };
 
+  /** 預覽與實際匯入共用同一條管線，畫面上看到的就是會匯入的名單。 */
+  const buildImportStudents = (rows: unknown[][]): SeatStudent[] =>
+    (skipFirstRow ? rows.slice(1) : rows)
+      // 先濾掉空白列，名單順序才不會被空列佔號。
+      .map((row) => ({ row, name: formatImportedRow(row) }))
+      .filter((entry) => entry.name)
+      .map((entry, index) => ({
+        name: entry.name,
+        tag: readImportedTag(entry.row, index + 1),
+      }));
+
   const separatorDescription =
     importSeparator === ""
       ? "不分隔"
       : /^ +$/.test(importSeparator)
         ? `${importSeparator.length} 個空白`
         : `「${importSeparator}」`;
-  const importSampleRow = ["A01", "王小明", "三年甲班"];
-  const importPreview =
-    formatImportedRow(importSampleRow) || "（空白，不會匯入）";
-  const importTagPreview = readImportedTag(importSampleRow, 1);
 
   const showOperationNotice = useCallback((message: string) => {
     setOperationNotice({ message });
@@ -692,22 +716,43 @@ export const SeatTable = () => {
     applySeatLayout(rowCount, colCount, createSeatList(seatList.length));
   };
 
+  /**
+   * 系統的檔案選擇視窗是原生視窗，按下按鈕到視窗跳出中間會有明顯空檔，
+   * 所以先把按鈕切成等待狀態給回饋，並趁空檔預先載入 xlsx 解析器。
+   */
   const inputFile = () => {
+    if (isImportBusy) return;
+
+    setIsImportBusy(true);
+    void import("xlsx");
+
     const input = document.createElement("input");
     input.accept = ".xlsx";
     input.type = "file";
+    let hasPickedFile = false;
     input.onchange = () => {
+      hasPickedFile = true;
       const file = input.files?.[0];
-      if (file) parseExcel(file);
+      if (file) {
+        readWorkbook(file);
+      } else {
+        setIsImportBusy(false);
+      }
     };
+    // 使用者直接關掉檔案視窗時 change 不會觸發，等視窗重新取得焦點再解鎖按鈕。
+    window.addEventListener(
+      "focus",
+      () => {
+        window.setTimeout(() => {
+          if (!hasPickedFile) setIsImportBusy(false);
+        }, 300);
+      },
+      { once: true },
+    );
     input.click();
   };
 
-  const confirmImport = () => {
-    setIsImportSettingsOpen(false);
-    inputFile();
-  };
-
+  /** 回傳實際填入學生的座位索引（依填入順序），容量不足時回傳 null。 */
   const importData = (students: SeatStudent[]) => {
     const capacity = seatList.reduce(
       (count, seat) => count + Number(seat.status === seatStatus.ava),
@@ -716,7 +761,7 @@ export const SeatTable = () => {
 
     if (students.length > capacity) {
       alert("學生數量大於座位數量! 請調整座位數量。");
-      return;
+      return null;
     }
 
     const shuffledSeatIndexes = shuffle(
@@ -727,6 +772,7 @@ export const SeatTable = () => {
         seat.status === seatStatus.emp ? seatStatus.emp : seatStatus.ava,
       ),
     );
+    const filledSeatIndexes: number[] = [];
     let studentIndex = 0;
 
     for (const seatIndex of shuffledSeatIndexes) {
@@ -740,11 +786,13 @@ export const SeatTable = () => {
           false,
           students[studentIndex].tag,
         );
+        filledSeatIndexes.push(seatIndex);
         studentIndex++;
       }
     }
 
     applySeatLayout(rowCount, colCount, nextSeats);
+    return filledSeatIndexes;
   };
 
   const clearSettleTimer = useCallback(() => {
@@ -876,6 +924,7 @@ export const SeatTable = () => {
       {
         mode: arrangeMode,
         examPattern,
+        examSeparateCategories,
         numericOrder,
         numericGrouping,
         randomizeWithinGroup,
@@ -1127,60 +1176,46 @@ export const SeatTable = () => {
     playSettleAnimation(settleOrder);
   };
 
-  const parseExcel = (file: File) => {
-    if (
-      importFormatMode === "selected-columns" &&
-      !parseImportColumns(importColumns)
-    ) {
-      alert("請輸入有效的欄位編號，例如 1,2,4。");
-      return;
-    }
-
-    if (
-      importTagSource === "column" &&
-      !parseImportTagColumn(importTagColumn)
-    ) {
-      alert("排序依據欄位請輸入單一欄位編號，例如 3。");
-      return;
-    }
-
+  /** 只負責把檔案讀成工作表資料並開啟預覽視窗，實際套用交給預覽視窗確認。 */
+  const readWorkbook = (file: File) => {
     const reader = new FileReader();
     reader.onload = async (event) => {
-      if (!(event.target?.result instanceof ArrayBuffer)) return;
+      if (!(event.target?.result instanceof ArrayBuffer)) {
+        setIsImportBusy(false);
+        return;
+      }
 
       try {
         const XLSX = await import("xlsx");
         const workbook = XLSX.read(event.target.result, { type: "array" });
-        const worksheetName = workbook.SheetNames[0];
-        if (!worksheetName) {
+        // 名單檔案不大，一次全部解析好，切換工作表就不必留著 workbook。
+        const sheets = workbook.SheetNames.map((name) => ({
+          name,
+          rows: XLSX.utils.sheet_to_json<unknown[]>(workbook.Sheets[name], {
+            header: 1,
+          }),
+        })).filter((sheet) => sheet.rows.length > 0);
+
+        if (sheets.length === 0) {
           alert("Excel 檔案中沒有可讀取的工作表。");
           return;
         }
 
-        const rows = XLSX.utils.sheet_to_json<unknown[]>(
-          workbook.Sheets[worksheetName],
-          { header: 1 },
-        );
-        const rowsToImport = skipFirstRow ? rows.slice(1) : rows;
-        // 先濾掉空白列，名單順序才不會被空列佔號。
-        const students = rowsToImport
-          .map((row) => ({ row, name: formatImportedRow(row) }))
-          .filter((entry) => entry.name)
-          .map((entry, index) => ({
-            name: entry.name,
-            tag: readImportedTag(entry.row, index + 1),
-          }));
-
-        if (students.length === 0) {
-          alert("Excel 檔案中沒有學生資料。");
-          return;
-        }
-        importData(students);
+        setImportSource({
+          fileName: file.name,
+          sheets,
+          sheetName: sheets[0].name,
+        });
       } catch {
         alert("無法讀取 Excel 檔案，請確認檔案格式是否正確。");
+      } finally {
+        setIsImportBusy(false);
       }
     };
-    reader.onerror = () => alert("無法讀取選取的檔案。");
+    reader.onerror = () => {
+      setIsImportBusy(false);
+      alert("無法讀取選取的檔案。");
+    };
     reader.readAsArrayBuffer(file);
   };
 
@@ -1262,7 +1297,7 @@ export const SeatTable = () => {
       return;
     }
 
-    parseExcel(file);
+    readWorkbook(file);
   };
 
   const seatCounts = seatList.reduce(
@@ -1293,6 +1328,97 @@ export const SeatTable = () => {
     movableStudentCount === 0 || (needsTagData && taggedStudentCount === 0);
   const arrangeHint = ARRANGE_MODE_HINTS[arrangeMode];
 
+  const activeImportSheet =
+    importSource?.sheets.find(
+      (sheet) => sheet.name === importSource.sheetName,
+    ) ?? null;
+  const importRows = activeImportSheet?.rows ?? [];
+  const importStudents = buildImportStudents(importRows);
+  const importPreviewRows = importRows.slice(0, MAX_IMPORT_PREVIEW_ROW);
+  const importPreviewColumns = Array.from(
+    {
+      length: Math.min(
+        importRows.reduce((count, row) => Math.max(count, row.length), 0),
+        MAX_IMPORT_PREVIEW_COLUMN,
+      ),
+    },
+    (_, index) => index + 1,
+  );
+  /** 預覽列的實際結果，order 必須跟真正匯入時的編號一致。 */
+  const importPreviewEntries = importPreviewRows.reduce<
+    { row: unknown[]; skipped: boolean; name: string; tag: string }[]
+  >((entries, row, rowIndex) => {
+    const skipped = skipFirstRow && rowIndex === 0;
+    const name = skipped ? "" : formatImportedRow(row);
+    const order = entries.filter((entry) => entry.name).length + 1;
+
+    entries.push({
+      row,
+      skipped,
+      name,
+      tag: name ? readImportedTag(row, order) : "",
+    });
+    return entries;
+  }, []);
+  const importSelectedColumns =
+    importFormatMode === "selected-columns"
+      ? (parseImportColumns(importColumns) ?? [])
+      : [];
+  const importTagColumnNumber =
+    importTagSource === "column"
+      ? (parseImportTagColumn(importTagColumn)?.column ?? null)
+      : null;
+
+  const describeImportIssue = () => {
+    if (!activeImportSheet) return null;
+    if (
+      importFormatMode === "selected-columns" &&
+      !parseImportColumns(importColumns)
+    ) {
+      return "請輸入有效的欄位編號，例如 1,2,4。";
+    }
+    if (importTagSource === "column" && !parseImportTagColumn(importTagColumn)) {
+      return "排序依據欄位請輸入單一欄位編號，例如 3。";
+    }
+    if (importStudents.length === 0) {
+      return "這個設定讀不到任何學生，請調整顯示欄位或略過第一列的設定。";
+    }
+    if (importStudents.length > seatCounts[seatStatus.ava]) {
+      return `學生 ${importStudents.length} 人超過可分配座位 ${
+        seatCounts[seatStatus.ava]
+      } 個，請先增加座位或清空座位。`;
+    }
+
+    return null;
+  };
+  const importIssue = describeImportIssue();
+
+  /** 點欄位標題就等於勾選「顯示欄位」，合併整列模式會自動切成組合指定欄位。 */
+  const toggleImportColumn = (column: number) => {
+    const nextColumns = importSelectedColumns.includes(column)
+      ? importSelectedColumns.filter((selected) => selected !== column)
+      : [...importSelectedColumns, column];
+
+    // 新選的欄位接在最後，保留使用者自己排的組合順序。
+    setImportFormatMode("selected-columns");
+    setImportColumns(nextColumns.join(","));
+  };
+
+  const toggleImportTagColumn = (column: number) => {
+    setImportTagColumn(importTagColumnNumber === column ? "" : String(column));
+  };
+
+  const confirmImportStudents = () => {
+    if (importIssue) return;
+
+    const filledSeatIndexes = importData(importStudents);
+    if (!filledSeatIndexes) return;
+
+    setImportSource(null);
+    showOperationNotice(`已匯入 ${importStudents.length} 位學生`);
+    playSettleAnimation(filledSeatIndexes);
+  };
+
   const seatMenuTarget = seatMenu ? seatList[seatMenu.index] : undefined;
   const renameSeatLabel =
     renameSeatIndex === null
@@ -1314,7 +1440,7 @@ export const SeatTable = () => {
               </p>
               <p className="select-none text-[#ACB4C0] font-normal text-[14px] leading-[130%]">
                 左鍵切換座位狀態，右鍵可修改文字、釘選或刪除學生。Ctrl + Z
-                可以復原，Ctrl + Y 可以重做。
+                可以復原、Ctrl + Y 可以重做。
               </p>
             </div>
 
@@ -1322,9 +1448,10 @@ export const SeatTable = () => {
             <div className="flex w-full flex-row-reverse flex-wrap px-3 text-right">
               <button
                 className="functionalButton basicButtonAnimation"
-                onClick={() => setIsImportSettingsOpen(true)}
+                onClick={inputFile}
+                disabled={isImportBusy}
               >
-                匯入學生
+                {isImportBusy ? "開啟檔案中…" : "匯入學生"}
               </button>
               <button
                 className="functionalButton basicButtonAnimation"
@@ -1360,7 +1487,7 @@ export const SeatTable = () => {
               </p>
               {needsTagData && taggedStudentCount === 0 && (
                 <p className="mt-1 select-none text-[11px] text-red-400">
-                  這個排序方式需要排序依據資料，請在「匯入學生」設定中指定排序依據欄位後重新匯入。
+                  這個排序方式需要排序依據資料，請在匯入的預覽視窗指定排序依據欄位後重新匯入。
                 </p>
               )}
             </div>
@@ -1398,11 +1525,25 @@ export const SeatTable = () => {
             </label>
 
             {arrangeMode === "exam" && (
-              <label className="block">
-                <span className="fieldLabel">
-                  座位圖樣
-                </span>
+              <div className="block">
+                <div className="fieldLabelRow">
+                  <label className="fieldLabel" htmlFor="examPattern">
+                    座位圖樣
+                  </label>
+                  <label className="flex cursor-pointer items-center gap-1.5">
+                    <input
+                      type="checkbox"
+                      checked={examSeparateCategories}
+                      onChange={(event) =>
+                        setExamSeparateCategories(event.target.checked)
+                      }
+                      className="checkboxField"
+                    />
+                    <span className="hintText">避開同類別</span>
+                  </label>
+                </div>
                 <select
+                  id="examPattern"
                   value={examPattern}
                   onChange={(event) =>
                     setExamPattern(event.target.value as ExamPattern)
@@ -1418,9 +1559,9 @@ export const SeatTable = () => {
                   )}
                 </select>
                 <span className="formHint hintText">
-                  沒被選到的座位會改為停用。
+                  沒被選到的座位會改為停用；勾選「避開同類別」會依排序依據讓相鄰座位盡量落在不同類別。
                 </span>
-              </label>
+              </div>
             )}
 
             {arrangeMode === "numeric" && (
@@ -1486,7 +1627,9 @@ export const SeatTable = () => {
                   <span className="block hintText">
                     {arrangeMode === "numeric"
                       ? "同一列／排／區塊內的學生順序隨機打亂，群與群之間仍照數值大小。"
-                      : "同一類別內的學生順序隨機打亂；取消勾選則照匯入名單的順序。"}
+                      : arrangeMode === "exam" && !examSeparateCategories
+                        ? "所有學生的順序隨機打亂；取消勾選則照匯入名單的順序填入座位。"
+                        : "同一類別內的學生順序隨機打亂；取消勾選則照匯入名單的順序。"}
                   </span>
                 </span>
               </label>
@@ -1719,11 +1862,11 @@ export const SeatTable = () => {
         />
       </div>
 
-      <Transition show={isImportSettingsOpen}>
+      <Transition show={importSource !== null}>
         <Dialog
           as="div"
           className="dialogRoot"
-          onClose={() => setIsImportSettingsOpen(false)}
+          onClose={() => setImportSource(null)}
         >
           <div className="dialogBackdrop">
             <div className="dialogScroll">
@@ -1735,16 +1878,46 @@ export const SeatTable = () => {
                 leaveFrom="opacity-100 scale-100"
                 leaveTo="opacity-0 scale-95"
               >
-                <DialogPanel className="dialogPanel max-w-2xl">
-                  <DialogTitle
-                    as="h3"
-                    className="dialogTitle"
-                  >
-                    匯入學生設定
-                  </DialogTitle>
-                  <p className="fieldNote">
-                    設定 XLSX 資料的組合方式，再選擇要匯入的檔案。
-                  </p>
+                <DialogPanel className="dialogPanel max-w-4xl">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <DialogTitle
+                        as="h3"
+                        className="dialogTitle"
+                      >
+                        匯入學生
+                      </DialogTitle>
+                      <p className="fieldNote truncate">
+                        {importSource?.fileName} · 共 {importRows.length} 列
+                      </p>
+                    </div>
+
+                    {importSource && importSource.sheets.length > 1 && (
+                      <label className="block w-44 shrink-0">
+                        <span className="fieldLabel">工作表</span>
+                        <select
+                          value={importSource.sheetName}
+                          onChange={(event) =>
+                            setImportSource((currentSource) =>
+                              currentSource
+                                ? {
+                                    ...currentSource,
+                                    sheetName: event.target.value,
+                                  }
+                                : currentSource,
+                            )
+                          }
+                          className="selectField bg-[#1C2133]"
+                        >
+                          {importSource.sheets.map((sheet) => (
+                            <option key={sheet.name} value={sheet.name}>
+                              {sheet.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                  </div>
 
                   <div className="mt-5 space-y-5">
                     <section>
@@ -1884,55 +2057,180 @@ export const SeatTable = () => {
 
                     <div className="h-px bg-[#444B5F]" />
 
-                    <div className="grid grid-cols-1 gap-4">
-                      <label className="optionCard cursor-pointer bg-[#1C2133]">
-                        <input
-                          type="checkbox"
-                          checked={skipFirstRow}
-                          onChange={(event) =>
-                            setSkipFirstRow(event.target.checked)
-                          }
-                          className="checkboxField"
-                        />
-                        <span>
-                          <span className="optionTitle">
-                            略過第一列
-                          </span>
-                          <span className="block hintText">
-                            Excel 第一列是姓名、班級等欄位標題時啟用。
-                          </span>
+                    <label className="optionCard cursor-pointer bg-[#1C2133]">
+                      <input
+                        type="checkbox"
+                        checked={skipFirstRow}
+                        onChange={(event) =>
+                          setSkipFirstRow(event.target.checked)
+                        }
+                        className="checkboxField"
+                      />
+                      <span>
+                        <span className="optionTitle">
+                          略過第一列
                         </span>
-                      </label>
+                        <span className="block hintText">
+                          Excel 第一列是姓名、班級等欄位標題時啟用。
+                        </span>
+                      </span>
+                    </label>
 
-                      <div className="flex items-center justify-between gap-4 rounded-lg border border-fuchsia-400/20 bg-fuchsia-400/5 px-3 py-2.5">
-                        <span className="text-xs font-medium text-fuchsia-300">
-                          範例：A01、王小明、三年甲班
+                    <section>
+                      <div className="mb-2 flex items-baseline gap-2">
+                        <h4 className="text-sm font-medium text-[#EDF0F4]">
+                          檔案預覽
+                        </h4>
+                        <span className="hintText">
+                          點欄位標題可以選取要顯示在座位上的欄位
+                          {importTagSource === "column" &&
+                            "，點「排」可以選排序依據"}
+                          。
                         </span>
-                        <code className="truncate text-right text-sm text-[#EDF0F4]">
-                          {importPreview}
-                          {importTagPreview && (
-                            <span className="seatTag">{importTagPreview}</span>
-                          )}
-                        </code>
                       </div>
-                    </div>
+
+                      <div className="overflow-x-auto rounded-lg border border-[#444B5F] bg-[#1C2133]">
+                        <table className="importPreviewTable">
+                          <thead>
+                            <tr>
+                              <th className="importPreviewIndexCell">列</th>
+                              {importPreviewColumns.map((column) => (
+                                <th key={column}>
+                                  <div className="flex items-start gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleImportColumn(column)}
+                                      aria-pressed={importSelectedColumns.includes(
+                                        column,
+                                      )}
+                                      title={`第 ${column} 欄`}
+                                      className={`importPreviewColumnButton ${
+                                        importSelectedColumns.includes(column)
+                                          ? "importPreviewColumnButtonActive"
+                                          : ""
+                                      }`}
+                                    >
+                                      <span className="importPreviewColumnNumber">
+                                        {column}
+                                      </span>
+                                      <span className="truncate">
+                                        {String(
+                                          importRows[0]?.[column - 1] ?? "",
+                                        )}
+                                      </span>
+                                    </button>
+
+                                    {importTagSource === "column" && (
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          toggleImportTagColumn(column)
+                                        }
+                                        aria-pressed={
+                                          importTagColumnNumber === column
+                                        }
+                                        title="設為排序依據"
+                                        className={`importPreviewTagChip ${
+                                          importTagColumnNumber === column
+                                            ? "importPreviewTagChipActive"
+                                            : ""
+                                        }`}
+                                      >
+                                        排
+                                      </button>
+                                    )}
+                                  </div>
+                                </th>
+                              ))}
+                              <th className="importPreviewResultCell">
+                                座位文字
+                              </th>
+                              {importTagSource !== "none" && (
+                                <th className="importPreviewResultCell">
+                                  排序依據
+                                </th>
+                              )}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {importPreviewEntries.map((entry, rowIndex) => (
+                              <tr
+                                key={rowIndex}
+                                className={
+                                  entry.skipped || !entry.name
+                                    ? "importPreviewRowMuted"
+                                    : ""
+                                }
+                              >
+                                <td className="importPreviewIndexCell">
+                                  {rowIndex + 1}
+                                </td>
+                                {importPreviewColumns.map((column) => (
+                                  <td
+                                    key={column}
+                                    className={
+                                      importSelectedColumns.includes(column)
+                                        ? "importPreviewCellSelected"
+                                        : ""
+                                    }
+                                  >
+                                    {String(entry.row[column - 1] ?? "")}
+                                  </td>
+                                ))}
+                                <td className="importPreviewResultCell">
+                                  {entry.skipped
+                                    ? "已略過"
+                                    : entry.name || "空白，不會匯入"}
+                                </td>
+                                {importTagSource !== "none" && (
+                                  <td className="importPreviewResultCell">
+                                    {entry.tag || "—"}
+                                  </td>
+                                )}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {importRows.length > importPreviewRows.length && (
+                        <span className="formHint hintText">
+                          僅顯示前 {importPreviewRows.length} 列，共{" "}
+                          {importRows.length} 列。
+                        </span>
+                      )}
+                    </section>
                   </div>
 
-                  <div className="dialogActions">
-                    <button
-                      type="button"
-                      onClick={() => setIsImportSettingsOpen(false)}
-                      className="dialogButton dialogButtonGhost"
+                  <div className="dialogActions items-center justify-between">
+                    <p
+                      className={
+                        importIssue ? "text-xs text-red-400" : "hintText"
+                      }
                     >
-                      取消
-                    </button>
-                    <button
-                      type="button"
-                      onClick={confirmImport}
-                      className="dialogButton dialogButtonPrimary"
-                    >
-                      選擇 XLSX 檔案
-                    </button>
+                      {importIssue ??
+                        `將匯入 ${importStudents.length} 位學生到 ${
+                          seatCounts[seatStatus.ava]
+                        } 個可分配座位。`}
+                    </p>
+
+                    <div className="flex shrink-0 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setImportSource(null)}
+                        className="dialogButton dialogButtonGhost"
+                      >
+                        取消
+                      </button>
+                      <button
+                        type="button"
+                        onClick={confirmImportStudents}
+                        disabled={importIssue !== null}
+                        className="dialogButton dialogButtonPrimary"
+                      >
+                        匯入 {importStudents.length} 位學生
+                      </button>
+                    </div>
                   </div>
                 </DialogPanel>
               </TransitionChild>

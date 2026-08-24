@@ -126,7 +126,8 @@
 
     /* --- 對話框按鈕：.dialogButton 配一個色調類別 --- */
     .dialogButton {
-        @apply rounded-lg px-3 py-2 text-xs font-bold transition;
+        @apply rounded-lg px-3 py-2 text-xs font-bold transition
+        disabled:cursor-not-allowed disabled:opacity-40;
     }
 
     .dialogButtonGhost {
@@ -162,6 +163,15 @@
         @apply mb-1.5 block text-xs font-medium text-[#ACB4C0];
     }
 
+    /* 標題右側掛附加選項時，外距改由整列負責。 */
+    .fieldLabelRow {
+        @apply mb-1.5 flex items-center justify-between gap-2;
+    }
+
+    .fieldLabelRow .fieldLabel {
+        @apply mb-0;
+    }
+
     .fieldNote {
         @apply mt-1 text-xs text-[#ACB4C0];
     }
@@ -186,6 +196,68 @@
 
     .optionTitle {
         @apply block text-sm text-[#EDF0F4];
+    }
+
+    /* --- 匯入預覽表格 --- */
+    /* 文字色放在表格上，讓單一儲存格的色彩類別可以直接覆蓋繼承值。 */
+    .importPreviewTable {
+        @apply w-full border-collapse whitespace-nowrap
+        text-left text-xs text-[#EDF0F4];
+    }
+
+    .importPreviewTable th,
+    .importPreviewTable td {
+        @apply border-b border-[#444B5F] px-2 py-1.5;
+    }
+
+    .importPreviewTable thead th {
+        @apply p-1 align-bottom;
+    }
+
+    .importPreviewTable tbody tr:last-child th,
+    .importPreviewTable tbody tr:last-child td {
+        @apply border-b-0;
+    }
+
+    .importPreviewIndexCell {
+        @apply w-8 text-center text-[11px] text-[#7F8798];
+    }
+
+    .importPreviewColumnButton {
+        @apply flex w-full min-w-[72px] max-w-[140px] cursor-pointer
+        items-center gap-1.5 rounded-md border border-[#444B5F] px-2 py-1
+        text-[11px] font-medium text-[#ACB4C0] transition
+        hover:border-fuchsia-400/60 hover:text-fuchsia-300;
+    }
+
+    .importPreviewColumnButtonActive {
+        @apply border-fuchsia-400 bg-fuchsia-400/10 text-fuchsia-300;
+    }
+
+    .importPreviewColumnNumber {
+        @apply shrink-0 rounded bg-black/30 px-1 text-[10px] font-bold;
+    }
+
+    .importPreviewTagChip {
+        @apply shrink-0 cursor-pointer rounded-md border border-dashed
+        border-[#596178] px-1.5 py-1 text-[10px] font-bold text-[#7F8798]
+        transition hover:border-amber-300 hover:text-amber-200;
+    }
+
+    .importPreviewTagChipActive {
+        @apply border-amber-300 bg-amber-300/10 text-amber-200;
+    }
+
+    .importPreviewCellSelected {
+        @apply bg-fuchsia-400/5 text-fuchsia-200;
+    }
+
+    .importPreviewResultCell {
+        @apply border-l border-[#444B5F];
+    }
+
+    .importPreviewRowMuted {
+        @apply text-[#6F778A] opacity-60;
     }
 
     /* --- 版面區塊 --- */

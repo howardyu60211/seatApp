@@ -18,6 +18,8 @@ export interface ArrangeOptions {
   examPattern: ExamPattern;
   numericOrder: NumericOrder;
   numericGrouping: NumericGrouping;
+  /** 考試座是否沿用「相鄰座位盡量落在不同類別」的排法。 */
+  examSeparateCategories: boolean;
   /** 同一群（同類別或同一列／排／區塊）內是否重新隨機順序。 */
   randomizeWithinGroup: boolean;
 }
@@ -230,6 +232,28 @@ const assignAlternatingByTag = (
   };
 };
 
+/** 不分類別，把學生依序（或打亂後）填進開放座位。 */
+const assignInOrder = (
+  targetIndexes: readonly number[],
+  students: readonly SeatStudent[],
+  randomize: boolean,
+) => {
+  const orderedTargets = [...targetIndexes].sort((left, right) => left - right);
+  const orderedStudents = randomize ? shuffle([...students]) : [...students];
+  const assignments = new Map<number, SeatStudent>();
+  const filledOrder: number[] = [];
+
+  orderedTargets.forEach((seatIndex, position) => {
+    const student = orderedStudents[position];
+    if (!student) return;
+
+    assignments.set(seatIndex, student);
+    filledOrder.push(seatIndex);
+  });
+
+  return { assignments, filledOrder };
+};
+
 const assignByNumber = (
   rowCount: number,
   colCount: number,
@@ -277,11 +301,14 @@ export const arrangeSeats = (
   }
 
   const hasTag = students.some((student) => student.tag.trim());
-  if (options.mode !== "exam" && !hasTag) {
+  const usesTag = options.mode !== "exam" || options.examSeparateCategories;
+  if (usesTag && !hasTag) {
     return {
       ok: false,
       error:
-        "這些學生沒有排序依據資料，請在「匯入學生設定」中指定排序依據欄位後重新匯入。",
+        options.mode === "exam"
+          ? "這些學生沒有排序依據資料，請取消勾選「相鄰座位避開同類別」，或在「匯入學生設定」中指定排序依據欄位後重新匯入。"
+          : "這些學生沒有排序依據資料，請在「匯入學生設定」中指定排序依據欄位後重新匯入。",
     };
   }
 
@@ -309,8 +336,8 @@ export const arrangeSeats = (
     };
   }
 
-  const { assignments, filledOrder } =
-    options.mode === "numeric"
+  const { assignments, filledOrder } = usesTag
+    ? options.mode === "numeric"
       ? assignByNumber(rowCount, colCount, targetIndexes, students, options)
       : assignAlternatingByTag(
           colCount,
@@ -318,7 +345,8 @@ export const arrangeSeats = (
           targetIndexes,
           students,
           options.randomizeWithinGroup,
-        );
+        )
+    : assignInOrder(targetIndexes, students, options.randomizeWithinGroup);
 
   const nextSeats = seats.map((seat, index) => {
     if (isPinnedSeat(seat)) {
