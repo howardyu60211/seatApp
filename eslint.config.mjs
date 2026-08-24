@@ -1,22 +1,11 @@
-import { defineConfig } from "eslint/config";
-import { fixupConfigRules } from "@eslint/compat";
-import globals from "globals";
-import tsParser from "@typescript-eslint/parser";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import js from "@eslint/js";
-import { FlatCompat } from "@eslint/eslintrc";
+import tseslint from "typescript-eslint";
+import importPlugin from "eslint-plugin-import";
+import reactHooks from "eslint-plugin-react-hooks";
+import prettier from "eslint-config-prettier/flat";
+import globals from "globals";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-  recommendedConfig: js.configs.recommended,
-  allConfig: js.configs.all,
-});
-
-export default defineConfig([
+export default tseslint.config(
   // Generated files / dependencies
   {
     ignores: [
@@ -24,36 +13,43 @@ export default defineConfig([
       ".vite/**",
       "out/**",
       "dist/**",
-      "eslint.config.mjs",
+      "graphify-out/**",
     ],
   },
 
   // SeatApp TypeScript source/config
   {
-    files: [
-      "src/**/*.ts",
-      "src/**/*.tsx",
-      "*.config.ts",
-    ],
+    files: ["src/**/*.{ts,tsx}", "*.config.{ts,mts}", "eslint.config.mjs"],
 
-    extends: fixupConfigRules(
-      compat.extends(
-        "eslint:recommended",
-        "plugin:@typescript-eslint/eslint-recommended",
-        "plugin:@typescript-eslint/recommended",
-        "plugin:import/recommended",
-        "plugin:import/electron",
-        "plugin:import/typescript",
-      ),
-    ),
+    extends: [
+      js.configs.recommended,
+      // tseslint.configs 是 typescript-eslint 官方文件的用法，不是誤用具名匯出。
+      // eslint-disable-next-line import/no-named-as-default-member
+      ...tseslint.configs.recommended,
+      importPlugin.flatConfigs.recommended,
+      importPlugin.flatConfigs.electron,
+      importPlugin.flatConfigs.typescript,
+      reactHooks.configs.flat["recommended-latest"],
+      // 必須放最後：關掉與 Prettier 衝突的樣式規則
+      prettier,
+    ],
 
     languageOptions: {
       globals: {
         ...globals.browser,
         ...globals.node,
       },
+    },
 
-      parser: tsParser,
+    settings: {
+      // eslint-plugin-import 內建的 node resolver 看不懂 package.json 的 exports map，
+      // typescript-eslint / @tailwindcss/vite 這類純 ESM 套件會被誤判為 no-unresolved。
+      // eslint-plugin-import 2.32 還不支援 resolver-next，只能用舊式的具名 resolver 設定。
+      "import/resolver": {
+        typescript: {
+          project: "./tsconfig.json",
+        },
+      },
     },
   },
-]);
+);

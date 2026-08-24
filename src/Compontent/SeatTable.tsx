@@ -455,13 +455,14 @@ export const SeatTable = () => {
         : `「${importSeparator}」`;
 
   const showOperationNotice = useCallback((message: string) => {
+    // 每次都建立新物件，讓下方 effect 重新計時（同訊息連續觸發也會重新倒數）。
     setOperationNotice({ message });
+    setIsOperationNoticeVisible(true);
   }, []);
 
   useEffect(() => {
     if (!operationNotice) return;
 
-    setIsOperationNoticeVisible(true);
     const timeoutId = window.setTimeout(
       () => setIsOperationNoticeVisible(false),
       2400,

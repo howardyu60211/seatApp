@@ -1,0 +1,42 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            // 啟動 app 並開啟 main process 的 inspector（Electron 的 --inspect 預設埠是 5858）。
+            // 中斷點若沒掛上，改用下面的「Electron: Start (等待除錯器)」再手動 attach。
+            "name": "Electron: Start (main 可除錯)",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": ["run", "start", "--", "--inspect-electron"],
+            "console": "integratedTerminal",
+            "sourceMaps": true,
+            "outFiles": ["${workspaceFolder}/.vite/build/*.js"],
+            "skipFiles": ["<node_internals>/**"]
+        },
+        {
+            // 在第一行就停住，等 "Electron: Attach to Main" 接上再往下跑。
+            "name": "Electron: Start (等待除錯器)",
+            "type": "node",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "runtimeExecutable": "npm",
+            "runtimeArgs": ["run", "start", "--", "--inspect-brk-electron"],
+            "console": "integratedTerminal",
+            "sourceMaps": true,
+            "outFiles": ["${workspaceFolder}/.vite/build/*.js"],
+            "skipFiles": ["<node_internals>/**"]
+        },
+        {
+            "name": "Electron: Attach to Main",
+            "type": "node",
+            "request": "attach",
+            "port": 5858,
+            "cwd": "${workspaceFolder}",
+            "sourceMaps": true,
+            "outFiles": ["${workspaceFolder}/.vite/build/*.js"],
+            "skipFiles": ["<node_internals>/**"]
+        }
+    ]
+}

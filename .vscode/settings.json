@@ -1,0 +1,44 @@
+{
+    // 專案用 TypeScript 6.0.3，不指定會用 VSCode 內建版本，
+    // 造成「編輯器報錯但 npx tsc 通過」的假警報。
+    "typescript.tsdk": "node_modules/typescript/lib",
+    "typescript.enablePromptUseWorkspaceTsdk": true,
+
+    "eslint.useFlatConfig": true,
+    "eslint.validate": ["typescript", "typescriptreact", "javascript"],
+
+    // Prettier 管格式、ESLint autofix 管語法問題。
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.fixAll.eslint": "explicit"
+    },
+
+    // 對齊 .prettierrc.json 的 tabWidth: 4。
+    "files.eol": "\n",
+    "editor.insertSpaces": true,
+    "editor.tabSize": 4,
+    "files.insertFinalNewline": true,
+    "files.trimTrailingWhitespace": true,
+
+    // Tailwind v4 沒有 tailwind.config.js，IntelliSense 要直接讀 CSS 進入點，
+    // 才認得 @layer components 裡的 .basicSeat / .functionalButton / .hintText 等共用 class。
+    "tailwindCSS.experimental.configFile": "src/index.css",
+    "css.validate": false,
+
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/.vite": true,
+        "**/out": true,
+        "**/dist": true,
+        "**/graphify-out": true,
+        "**/package-lock.json": true
+    },
+    "files.watcherExclude": {
+        "**/node_modules/**": true,
+        "**/.vite/**": true,
+        "**/out/**": true,
+        "**/dist/**": true,
+        "**/graphify-out/**": true
+    }
+}

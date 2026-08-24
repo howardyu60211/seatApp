@@ -94,4 +94,9 @@ out/
 #webstorm IDE config
 .idea/
 
+#VSCode：共享除錯與工作區設定，其餘個人設定不進版控
+.vscode/*
+!.vscode/launch.json
+!.vscode/settings.json
+
 dist/

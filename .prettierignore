@@ -1,0 +1,15 @@
+node_modules/
+.vite/
+out/
+dist/
+graphify-out/
+
+# npm 自行管理，重新格式化沒有好處
+package-lock.json
+
+# 工具自行管理的本機設定
+.claude/
+
+# 二進位與測試素材
+*.xlsx
+*.png
