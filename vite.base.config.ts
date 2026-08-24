@@ -1,11 +1,13 @@
 import { builtinModules } from 'node:module';
 import type { AddressInfo } from 'node:net';
 import type { ConfigEnv, Plugin, UserConfig } from 'vite';
-import pkg from './package.json';
 
 export const builtins = ['electron', ...builtinModules.map((m) => [m, `node:${m}`]).flat()];
 
-export const external = [...builtins, ...Object.keys('dependencies' in pkg ? (pkg.dependencies as Record<string, unknown>) : {})];
+// 只外部化 Node/Electron 內建模組，dependencies 一律 bundle 進 main.js。
+// 打包後的 asar 只含 .vite 與 package.json、沒有 node_modules，
+// 外部化任何 npm 套件都會讓正式版啟動時 MODULE_NOT_FOUND。
+export const external = [...builtins];
 
 export function getBuildConfig(env: ConfigEnv<'build'>): UserConfig {
   const { root, mode, command } = env;
