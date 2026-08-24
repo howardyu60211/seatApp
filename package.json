@@ -15,7 +15,7 @@
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "make": "electron-forge make",
-        "dist": "electron-builder build --win portable"
+        "dist": "electron-forge package && electron-builder build --win portable"
     },
     "build": {
         "appId": "com.howardyu.seatapp",
