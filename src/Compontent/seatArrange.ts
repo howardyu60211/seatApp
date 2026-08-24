@@ -2,7 +2,7 @@ import { createSeat, seatStatus, shuffle, type Seat, type SeatStudent } from "./
 
 export type ArrangeMode = "random" | "category" | "exam" | "numeric";
 export type ExamPattern = "column-gap" | "checkerboard";
-export type NumericOrder = "asc" | "desc";
+export type NumericOrder = "asc" | "desc" | "balanced";
 export type NumericGrouping = "row-major" | "snake" | "column-major" | "block";
 
 export type PlannedArrangeMode = Exclude<ArrangeMode, "random">;
@@ -42,6 +42,7 @@ export const EXAM_PATTERN_LABELS: Record<ExamPattern, string> = {
 export const NUMERIC_ORDER_LABELS: Record<NumericOrder, string> = {
     asc: "升冪（小 → 大）",
     desc: "降冪（大 → 小）",
+    balanced: "平均分配（每群高低平均）",
 };
 
 export const NUMERIC_GROUPING_LABELS: Record<NumericGrouping, string> = {
@@ -89,7 +90,8 @@ const sortStudentsByNumber = (students: readonly SeatStudent[], order: NumericOr
         if (!hasLeftValue) return 1;
         if (!hasRightValue) return -1;
 
-        return order === "asc" ? leftValue - rightValue : rightValue - leftValue;
+        // 平均分配沿用升冪為基準，再由 dealStudentsEvenly 打散到各群。
+        return order === "desc" ? rightValue - leftValue : leftValue - rightValue;
     });
 
 /** 依分群方式把整張座位表切成一組一組的座位索引，群內已排好填入順序。 */
@@ -230,6 +232,51 @@ const assignInOrder = (
     return { assignments, filledOrder };
 };
 
+/**
+ * 平均分配：把排序後的學生一輪一輪發給各群，每輪各群拿一位，
+ * 讓每一群都橫跨名單的高、中、低區段（2×2 即第一組、第二組、倒數第二組、倒數第一組各一位）。
+ */
+const dealStudentsEvenly = (
+    groups: readonly (readonly number[])[],
+    students: readonly SeatStudent[],
+    randomize: boolean,
+) => {
+    const buckets: SeatStudent[][] = groups.map(() => []);
+
+    // 座位比學生多時只用前面幾群，避免每群各拿一位、散成一整片。
+    let capacity = 0;
+    let usedGroupCount = 0;
+    while (usedGroupCount < groups.length && capacity < students.length) {
+        capacity += groups[usedGroupCount].length;
+        usedGroupCount++;
+    }
+
+    let cursor = 0;
+    let round = 0;
+
+    while (cursor < students.length) {
+        // 每輪重算還有空位的群，座位數不同的群額滿後就自動退出。
+        const openGroups = groups.slice(0, usedGroupCount).reduce<number[]>((open, group, index) => {
+            if (buckets[index].length < group.length) open.push(index);
+            return open;
+        }, []);
+        if (openGroups.length === 0) break;
+
+        const chunk = students.slice(cursor, cursor + openGroups.length);
+        cursor += chunk.length;
+
+        // 群內隨機時，這一段的順序打亂 → 每群拿到的是「該區段其中一位」。
+        if (randomize) shuffle(chunk);
+        // 否則用蛇形順序發牌，讓各群的數值總和盡量接近。
+        else if (round % 2 === 1) openGroups.reverse();
+
+        chunk.forEach((student, position) => buckets[openGroups[position]].push(student));
+        round++;
+    }
+
+    return buckets;
+};
+
 const assignByNumber = (
     rowCount: number,
     colCount: number,
@@ -243,13 +290,23 @@ const assignByNumber = (
         .map((group) => group.filter((seatIndex) => targetSet.has(seatIndex)))
         .filter((group) => group.length > 0);
 
+    const balancedBuckets =
+        options.numericOrder === "balanced"
+            ? dealStudentsEvenly(groups, sortedStudents, options.randomizeWithinGroup)
+            : null;
+
     const assignments = new Map<number, SeatStudent>();
     const filledOrder: number[] = [];
     let cursor = 0;
 
-    groups.forEach((group) => {
-        const groupStudents = sortedStudents.slice(cursor, cursor + group.length);
-        cursor += group.length;
+    groups.forEach((group, groupIndex) => {
+        let groupStudents: SeatStudent[];
+        if (balancedBuckets) {
+            groupStudents = balancedBuckets[groupIndex];
+        } else {
+            groupStudents = sortedStudents.slice(cursor, cursor + group.length);
+            cursor += group.length;
+        }
         if (options.randomizeWithinGroup) shuffle(groupStudents);
 
         group.forEach((seatIndex, position) => {

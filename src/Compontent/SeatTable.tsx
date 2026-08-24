@@ -353,7 +353,6 @@ export const SeatTable = () => {
     const [exportTitle, setExportTitle] = useState("學生座位表");
     const [showExportPodium, setShowExportPodium] = useState(false);
     const [showExportIndex, setShowExportIndex] = useState(true);
-    const [mirrorExportIndex, setMirrorExportIndex] = useState(false);
     const [importSource, setImportSource] = useState<ImportSource | null>(null);
     const [isImportBusy, setIsImportBusy] = useState(false);
     const [isExportDialogOpen, setIsExportDialogOpen] = useState(false);
@@ -889,7 +888,6 @@ export const SeatTable = () => {
                     title: exportTitle,
                     showPodium: showExportPodium,
                     showIndex: showExportIndex,
-                    mirrorIndex: showExportIndex && mirrorExportIndex,
                 },
             );
             showOperationNotice("已匯出 PNG 圖片");
@@ -906,7 +904,6 @@ export const SeatTable = () => {
                     title: exportTitle,
                     showPodium: showExportPodium,
                     showIndex: showExportIndex,
-                    mirrorIndex: showExportIndex && mirrorExportIndex,
                 },
             );
             showOperationNotice("已匯出 PDF");
@@ -1460,6 +1457,11 @@ export const SeatTable = () => {
                                             </option>
                                         ))}
                                     </select>
+                                    {numericOrder === "balanced" && (
+                                        <span className="formHint hintText">
+                                            平均分配會把學生依數值切成「每群座位數」個區段，每一列／排／區塊各取一位，讓每群的高低分佈平均。
+                                        </span>
+                                    )}
                                 </label>
                             </>
                         )}
@@ -1478,7 +1480,9 @@ export const SeatTable = () => {
                                     <span className="optionTitle">群內隨機排序</span>
                                     <span className="block hintText">
                                         {arrangeMode === "numeric"
-                                            ? "同一列／排／區塊內的學生順序隨機打亂，群與群之間仍照數值大小。"
+                                            ? numericOrder === "balanced"
+                                                ? "每個高低區段隨機挑一位分到同一群；取消勾選則照固定的蛇形順序分配。"
+                                                : "同一列／排／區塊內的學生順序隨機打亂，群與群之間仍照數值大小。"
                                             : arrangeMode === "exam" && !examSeparateCategories
                                               ? "所有學生的順序隨機打亂；取消勾選則照匯入名單的順序填入座位。"
                                               : "同一類別內的學生順序隨機打亂；取消勾選則照匯入名單的順序。"}
@@ -2199,31 +2203,6 @@ export const SeatTable = () => {
                                                     </span>
                                                     <span className="block hintText">
                                                         列號在左側、欄號在下方。
-                                                    </span>
-                                                </span>
-                                            </label>
-
-                                            <label
-                                                className={
-                                                    "optionCard bg-[#1C2133] " +
-                                                    (showExportIndex
-                                                        ? "cursor-pointer"
-                                                        : "cursor-not-allowed opacity-50")
-                                                }
-                                            >
-                                                <input
-                                                    type="checkbox"
-                                                    checked={mirrorExportIndex}
-                                                    disabled={!showExportIndex}
-                                                    onChange={(event) =>
-                                                        setMirrorExportIndex(event.target.checked)
-                                                    }
-                                                    className="checkboxField disabled:cursor-not-allowed"
-                                                />
-                                                <span>
-                                                    <span className="optionTitle">鏡像編號</span>
-                                                    <span className="block hintText">
-                                                        欄號改為由右至左，適合從講臺看向學生時使用。
                                                     </span>
                                                 </span>
                                             </label>

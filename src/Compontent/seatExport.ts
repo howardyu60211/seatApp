@@ -13,7 +13,6 @@ interface SeatExportOptions {
     title?: string;
     showPodium?: boolean;
     showIndex?: boolean;
-    mirrorIndex?: boolean;
 }
 
 interface SeatExportPalette {
@@ -188,9 +187,8 @@ const createSeatLayoutCanvas = (layout: SeatExportLayout, options: SeatExportOpt
 
         context.textAlign = "center";
         for (let col = 0; col < layout.colCount; col++) {
-            const columnNumber = options.mirrorIndex ? layout.colCount - col : col + 1;
             context.fillText(
-                String(columnNumber),
+                String(col + 1),
                 gridX + col * (SEAT_WIDTH + SEAT_GAP) + SEAT_WIDTH / 2,
                 gridY + gridHeight + INDEX_FOOTER / 2,
             );
