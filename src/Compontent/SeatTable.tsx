@@ -329,6 +329,7 @@ export const SeatTable = () => {
     const [isDeleteAllHistoryConfirming, setIsDeleteAllHistoryConfirming] = useState(false);
     const [seatHistory, setSeatHistory] = useState<SeatHistoryEntry[]>(initialSeatHistory);
     const [favoriteName, setFavoriteName] = useState("");
+    const [isFavoriteDialogOpen, setIsFavoriteDialogOpen] = useState(false);
     const [operationNotice, setOperationNotice] = useState<OperationNotice | null>(null);
     const [isOperationNoticeVisible, setIsOperationNoticeVisible] = useState(false);
     const [undoStack, setUndoStack] = useState<SeatLayout[]>([]);
@@ -536,7 +537,13 @@ export const SeatTable = () => {
             return nextHistory;
         });
         setFavoriteName("");
+        setIsFavoriteDialogOpen(false);
         showOperationNotice(`已收藏「${name}」`);
+    };
+
+    const closeFavoriteDialog = () => {
+        setFavoriteName("");
+        setIsFavoriteDialogOpen(false);
     };
 
     const deleteSeatHistory = (historyEntry: SeatHistoryEntry) => {
@@ -1287,426 +1294,439 @@ export const SeatTable = () => {
 
     return (
         <>
-            <div className="mt-4 w-full px-6 flex flex-wrap">
-                {/* seat card */}
-                <div className="w-full max-w-full pb-1 pl-0">
-                    <div className="flex flex-row -mx-3 pb-2">
-                        {/* text */}
-                        <div className="flex flex-col flex-none w-fit px-3">
-                            <p className="select-none text-[#EDF0F4] font-medium text-[14px] leading-[130%] pb-[8px]">
-                                學生座位預覽
-                            </p>
-                            <p className="select-none text-[#ACB4C0] font-normal text-[14px] leading-[130%]">
-                                左鍵切換座位狀態，右鍵可修改文字、釘選或刪除學生。Ctrl + Z
-                                可以復原、Ctrl + Y 可以重做。
-                            </p>
+            <div className="flex min-h-0 flex-1 gap-4 px-6 py-4">
+                <aside className="sidebarPanel">
+                    {/* 與右側標題列同高，兩邊標題才會對齊。 */}
+                    <div className="flex min-h-10 shrink-0 items-center">
+                        <p className="select-none text-[14px] font-medium leading-[130%] text-[#EDF0F4]">
+                            座位排序
+                        </p>
+                    </div>
+
+                    <section aria-label="座位排序" className="panelCard">
+                        <div className="flex flex-col gap-3">
+                            <div className="min-w-0">
+                                <p className="hintText">{arrangeHint}</p>
+                                <p className="mt-1 hintText">
+                                    可重排 {movableStudentCount} 人 · 已釘選 {pinnedSeatCount}{" "}
+                                    個座位 · 有排序依據 {taggedStudentCount} 人
+                                </p>
+                                {needsTagData && taggedStudentCount === 0 && (
+                                    <p className="mt-1 select-none text-[11px] text-red-400">
+                                        這個排序方式需要排序依據資料，請在匯入的預覽視窗指定排序依據欄位後重新匯入。
+                                    </p>
+                                )}
+                            </div>
+
+                            <button
+                                type="button"
+                                onClick={applyArrangement}
+                                disabled={isArrangeBlocked}
+                                className="functionalButton basicButtonAnimation w-full border-fuchsia-400 hover:bg-fuchsia-400/10 disabled:border-[#596178] disabled:text-[#6F778A]"
+                            >
+                                {arrangeMode === "random" ? "再抽一次" : "套用排序"}
+                            </button>
                         </div>
 
-                        {/* Button */}
-                        <div className="flex w-full flex-row-reverse flex-wrap px-3 text-right">
+                        <div className="mt-4 grid grid-cols-1 gap-3">
+                            <label className="block">
+                                <span className="fieldLabel">排序方式</span>
+                                <select
+                                    value={arrangeMode}
+                                    onChange={(event) =>
+                                        setArrangeMode(event.target.value as ArrangeMode)
+                                    }
+                                    className="selectField bg-[#141828]"
+                                >
+                                    {(Object.keys(ARRANGE_MODE_LABELS) as ArrangeMode[]).map(
+                                        (mode) => (
+                                            <option key={mode} value={mode}>
+                                                {ARRANGE_MODE_LABELS[mode]}
+                                            </option>
+                                        ),
+                                    )}
+                                </select>
+                            </label>
+
+                            {arrangeMode === "exam" && (
+                                <div className="block">
+                                    <div className="fieldLabelRow">
+                                        <label className="fieldLabel" htmlFor="examPattern">
+                                            座位圖樣
+                                        </label>
+                                        <label className="flex cursor-pointer items-center gap-1.5">
+                                            <input
+                                                type="checkbox"
+                                                checked={examSeparateCategories}
+                                                onChange={(event) =>
+                                                    setExamSeparateCategories(event.target.checked)
+                                                }
+                                                className="checkboxField"
+                                            />
+                                            <span className="hintText">避開同類別</span>
+                                        </label>
+                                    </div>
+                                    <select
+                                        id="examPattern"
+                                        value={examPattern}
+                                        onChange={(event) =>
+                                            setExamPattern(event.target.value as ExamPattern)
+                                        }
+                                        className="selectField bg-[#141828]"
+                                    >
+                                        {(Object.keys(EXAM_PATTERN_LABELS) as ExamPattern[]).map(
+                                            (pattern) => (
+                                                <option key={pattern} value={pattern}>
+                                                    {EXAM_PATTERN_LABELS[pattern]}
+                                                </option>
+                                            ),
+                                        )}
+                                    </select>
+                                    <span className="formHint hintText">
+                                        沒被選到的座位會改為停用；勾選「避開同類別」會依排序依據讓相鄰座位盡量落在不同類別。
+                                    </span>
+                                </div>
+                            )}
+
+                            {arrangeMode === "numeric" && (
+                                <>
+                                    <label className="block">
+                                        <span className="fieldLabel">數值順序</span>
+                                        <select
+                                            value={numericOrder}
+                                            onChange={(event) =>
+                                                setNumericOrder(event.target.value as NumericOrder)
+                                            }
+                                            className="selectField bg-[#141828]"
+                                        >
+                                            {(
+                                                Object.keys(NUMERIC_ORDER_LABELS) as NumericOrder[]
+                                            ).map((order) => (
+                                                <option key={order} value={order}>
+                                                    {NUMERIC_ORDER_LABELS[order]}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </label>
+
+                                    <label className="block">
+                                        <span className="fieldLabel">填入方式</span>
+                                        <select
+                                            value={numericGrouping}
+                                            onChange={(event) =>
+                                                setNumericGrouping(
+                                                    event.target.value as NumericGrouping,
+                                                )
+                                            }
+                                            className="selectField bg-[#141828]"
+                                        >
+                                            {(
+                                                Object.keys(
+                                                    NUMERIC_GROUPING_LABELS,
+                                                ) as NumericGrouping[]
+                                            ).map((grouping) => (
+                                                <option key={grouping} value={grouping}>
+                                                    {NUMERIC_GROUPING_LABELS[grouping]}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        {numericOrder === "balanced" && (
+                                            <span className="formHint hintText">
+                                                平均分配會把學生依數值切成「每群座位數」個區段，每一列／排／區塊各取一位，讓每群的高低分佈平均。
+                                            </span>
+                                        )}
+                                    </label>
+                                </>
+                            )}
+
+                            {arrangeMode !== "random" && (
+                                <label className="optionCard cursor-pointer bg-[#141828]">
+                                    <input
+                                        type="checkbox"
+                                        checked={randomizeWithinGroup}
+                                        onChange={(event) =>
+                                            setRandomizeWithinGroup(event.target.checked)
+                                        }
+                                        className="checkboxField"
+                                    />
+                                    <span>
+                                        <span className="optionTitle">群內隨機排序</span>
+                                        <span className="block hintText">
+                                            {arrangeMode === "numeric"
+                                                ? numericOrder === "balanced"
+                                                    ? "每個高低區段隨機挑一位分到同一群；取消勾選則照固定的蛇形順序分配。"
+                                                    : "同一列／排／區塊內的學生順序隨機打亂，群與群之間仍照數值大小。"
+                                                : arrangeMode === "exam" && !examSeparateCategories
+                                                  ? "所有學生的順序隨機打亂；取消勾選則照匯入名單的順序填入座位。"
+                                                  : "同一類別內的學生順序隨機打亂；取消勾選則照匯入名單的順序。"}
+                                        </span>
+                                    </span>
+                                </label>
+                            )}
+                        </div>
+                    </section>
+
+                    <section aria-label="座位收藏與紀錄" className="panelCard">
+                        <div className="flex gap-2">
                             <button
-                                className="functionalButton basicButtonAnimation"
+                                type="button"
+                                onClick={() => setIsFavoriteDialogOpen(true)}
+                                className="functionalButton basicButtonAnimation min-w-0 flex-1 px-3 whitespace-nowrap border-fuchsia-400 hover:bg-fuchsia-400/10"
+                            >
+                                ☆ 收藏
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => setIsHistoryOpen(true)}
+                                className="functionalButton basicButtonAnimation min-w-0 flex-1 px-3 whitespace-nowrap border-[#596178] bg-[#23283D] text-[#EDF0F4] hover:border-fuchsia-400 hover:text-fuchsia-400"
+                            >
+                                座位紀錄（{seatHistory.length}）
+                            </button>
+                        </div>
+                    </section>
+                </aside>
+
+                <main className="flex min-w-0 flex-1 flex-col gap-2">
+                    <div className="flex min-h-10 flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                        <p className="select-none text-[14px] font-medium leading-[130%] text-[#EDF0F4]">
+                            學生座位預覽
+                        </p>
+
+                        {/* Button */}
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                className="functionalButton basicButtonAnimation whitespace-nowrap"
                                 onClick={inputFile}
                                 disabled={isImportBusy}
                             >
-                                {isImportBusy ? "開啟檔案中…" : "匯入學生"}
+                                {isImportBusy ? "開啟中…" : "匯入學生"}
                             </button>
                             <button
-                                className="functionalButton basicButtonAnimation"
+                                onClick={() => setIsExportDialogOpen(true)}
+                                disabled={!hasSeatChanges}
+                                className="functionalButton basicButtonAnimation whitespace-nowrap"
+                            >
+                                匯出座位
+                            </button>
+                            <button
+                                className="functionalButton basicButtonAnimation whitespace-nowrap"
                                 onClick={clear}
                                 disabled={!hasSeatChanges}
                             >
                                 清空座位
                             </button>
-                            <button
-                                onClick={() => setIsExportDialogOpen(true)}
-                                disabled={!hasSeatChanges}
-                                className="functionalButton basicButtonAnimation"
-                            >
-                                匯出座位
-                            </button>
                         </div>
                     </div>
-                </div>
 
-                <section aria-label="座位排序" className="panelCard mb-3">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="min-w-0">
-                            <p className="select-none text-[14px] font-medium leading-[130%] text-[#EDF0F4]">
-                                座位排序
-                            </p>
-                            <p className="mt-1.5 hintText">{arrangeHint}</p>
-                            <p className="mt-1 hintText">
-                                可重排 {movableStudentCount} 人 · 已釘選 {pinnedSeatCount} 個座位 ·
-                                有排序依據 {taggedStudentCount} 人
-                            </p>
-                            {needsTagData && taggedStudentCount === 0 && (
-                                <p className="mt-1 select-none text-[11px] text-red-400">
-                                    這個排序方式需要排序依據資料，請在匯入的預覽視窗指定排序依據欄位後重新匯入。
-                                </p>
-                            )}
-                        </div>
-
-                        <button
-                            type="button"
-                            onClick={applyArrangement}
-                            disabled={isArrangeBlocked}
-                            className="functionalButton basicButtonAnimation shrink-0 border-fuchsia-400 hover:bg-fuchsia-400/10 disabled:border-[#596178] disabled:text-[#6F778A]"
+                    <div className="min-h-0 flex-1 overflow-auto">
+                        <div
+                            onDrop={dropFile}
+                            onDragOver={(e) => {
+                                e.preventDefault();
+                            }}
+                            className="seatGrid"
+                            style={{
+                                gridTemplateColumns: `auto repeat(${colCount}, minmax(0, 1fr)) auto`,
+                                // 一般列數時 1fr 讓座位長高填滿右欄，列數很多時退回最小高度並由外層捲動。
+                                gridTemplateRows: `auto repeat(${rowCount}, minmax(2rem, 1fr)) auto`,
+                            }}
                         >
-                            {arrangeMode === "random" ? "再抽一次" : "套用排序"}
-                        </button>
-                    </div>
-
-                    <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-                        <label className="block">
-                            <span className="fieldLabel">排序方式</span>
-                            <select
-                                value={arrangeMode}
-                                onChange={(event) =>
-                                    setArrangeMode(event.target.value as ArrangeMode)
-                                }
-                                className="selectField bg-[#141828]"
+                            <div />
+                            <div
+                                className="flex justify-center"
+                                style={{ gridColumn: `span ${colCount}` }}
                             >
-                                {(Object.keys(ARRANGE_MODE_LABELS) as ArrangeMode[]).map((mode) => (
-                                    <option key={mode} value={mode}>
-                                        {ARRANGE_MODE_LABELS[mode]}
-                                    </option>
-                                ))}
-                            </select>
-                        </label>
-
-                        {arrangeMode === "exam" && (
-                            <div className="block">
-                                <div className="fieldLabelRow">
-                                    <label className="fieldLabel" htmlFor="examPattern">
-                                        座位圖樣
-                                    </label>
-                                    <label className="flex cursor-pointer items-center gap-1.5">
-                                        <input
-                                            type="checkbox"
-                                            checked={examSeparateCategories}
-                                            onChange={(event) =>
-                                                setExamSeparateCategories(event.target.checked)
-                                            }
-                                            className="checkboxField"
-                                        />
-                                        <span className="hintText">避開同類別</span>
-                                    </label>
-                                </div>
-                                <select
-                                    id="examPattern"
-                                    value={examPattern}
-                                    onChange={(event) =>
-                                        setExamPattern(event.target.value as ExamPattern)
-                                    }
-                                    className="selectField bg-[#141828]"
-                                >
-                                    {(Object.keys(EXAM_PATTERN_LABELS) as ExamPattern[]).map(
-                                        (pattern) => (
-                                            <option key={pattern} value={pattern}>
-                                                {EXAM_PATTERN_LABELS[pattern]}
-                                            </option>
-                                        ),
-                                    )}
-                                </select>
-                                <span className="formHint hintText">
-                                    沒被選到的座位會改為停用；勾選「避開同類別」會依排序依據讓相鄰座位盡量落在不同類別。
-                                </span>
+                                <div className="podiumBadge">講臺</div>
                             </div>
-                        )}
+                            <div />
 
-                        {arrangeMode === "numeric" && (
-                            <>
-                                <label className="block">
-                                    <span className="fieldLabel">數值順序</span>
-                                    <select
-                                        value={numericOrder}
-                                        onChange={(event) =>
-                                            setNumericOrder(event.target.value as NumericOrder)
+                            {Array.from({ length: rowCount }, (_, row) => (
+                                <Fragment key={`row-${row}`}>
+                                    <div
+                                        className={
+                                            "seatHeaderCell group min-w-12" +
+                                            (rowCount > 1 ? " seatHeaderDraggable" : "")
                                         }
-                                        className="selectField bg-[#141828]"
-                                    >
-                                        {(Object.keys(NUMERIC_ORDER_LABELS) as NumericOrder[]).map(
-                                            (order) => (
-                                                <option key={order} value={order}>
-                                                    {NUMERIC_ORDER_LABELS[order]}
-                                                </option>
-                                            ),
-                                        )}
-                                    </select>
-                                </label>
-
-                                <label className="block">
-                                    <span className="fieldLabel">填入方式</span>
-                                    <select
-                                        value={numericGrouping}
-                                        onChange={(event) =>
-                                            setNumericGrouping(
-                                                event.target.value as NumericGrouping,
+                                        draggable={rowCount > 1}
+                                        title={rowCount > 1 ? "拖曳列號可與其他列互換" : undefined}
+                                        onDragStart={(event) =>
+                                            handleHeaderDragStart(event, ROW_DRAG_TYPE, row)
+                                        }
+                                        onDragOver={(event) =>
+                                            handleHeaderDragOver(event, ROW_DRAG_TYPE)
+                                        }
+                                        onDragLeave={(event) =>
+                                            event.currentTarget.classList.remove(
+                                                "seatHeaderDropTarget",
                                             )
                                         }
-                                        className="selectField bg-[#141828]"
+                                        onDragEnd={(event) =>
+                                            event.currentTarget.classList.remove(
+                                                "seatHeaderDragging",
+                                            )
+                                        }
+                                        onDrop={(event) =>
+                                            handleHeaderDrop(event, ROW_DRAG_TYPE, row)
+                                        }
                                     >
-                                        {(
-                                            Object.keys(
-                                                NUMERIC_GROUPING_LABELS,
-                                            ) as NumericGrouping[]
-                                        ).map((grouping) => (
-                                            <option key={grouping} value={grouping}>
-                                                {NUMERIC_GROUPING_LABELS[grouping]}
-                                            </option>
-                                        ))}
-                                    </select>
-                                    {numericOrder === "balanced" && (
-                                        <span className="formHint hintText">
-                                            平均分配會把學生依數值切成「每群座位數」個區段，每一列／排／區塊各取一位，讓每群的高低分佈平均。
-                                        </span>
-                                    )}
-                                </label>
-                            </>
-                        )}
+                                        {/* 與刪除鈕等寬的佔位，數字才會落在格子正中央。 */}
+                                        <span aria-hidden className="size-4 shrink-0" />
+                                        <span>{row + 1}</span>
+                                        <button
+                                            type="button"
+                                            onClick={() => removeRowAt(row)}
+                                            disabled={rowCount <= 1}
+                                            title={`移除第 ${row + 1} 列`}
+                                            aria-label={`移除第 ${row + 1} 列`}
+                                            className="seatHeaderDelete"
+                                        >
+                                            ×
+                                        </button>
+                                    </div>
+                                    {seatList
+                                        .slice(row * colCount, row * colCount + colCount)
+                                        .map((seat, col) => {
+                                            const i = row * colCount + col;
+                                            const settleDelay = settleDelays[i];
+                                            return (
+                                                <div
+                                                    draggable
+                                                    className={
+                                                        seat.status +
+                                                        " basicSeat" +
+                                                        (settleDelay === undefined
+                                                            ? ""
+                                                            : " seatSettling")
+                                                    }
+                                                    style={
+                                                        settleDelay === undefined
+                                                            ? undefined
+                                                            : { animationDelay: `${settleDelay}ms` }
+                                                    }
+                                                    title={
+                                                        seat.pinned
+                                                            ? "已釘選，再抽一次時不會移動"
+                                                            : undefined
+                                                    }
+                                                    key={
+                                                        settleDelay === undefined
+                                                            ? String(i)
+                                                            : `${i}-settle-${settleRun}`
+                                                    }
+                                                    onClick={() => toggleSeatStatus(i)}
+                                                    onContextMenu={(event) =>
+                                                        openSeatMenu(event, i)
+                                                    }
+                                                    onDragStart={(event) =>
+                                                        handleSeatDragStart(event, i)
+                                                    }
+                                                    onDragOver={handleSeatDragOver}
+                                                    onDragLeave={(event) =>
+                                                        event.currentTarget.classList.remove(
+                                                            "border-dashed",
+                                                            "opacity-50",
+                                                        )
+                                                    }
+                                                    onDragEnd={(event) =>
+                                                        event.currentTarget.classList.remove(
+                                                            "border-status-dim",
+                                                        )
+                                                    }
+                                                    onDrop={(event) => handleSeatDrop(event, i)}
+                                                >
+                                                    {seat.pinned && <PinIcon />}
+                                                    {seat.name}
+                                                    {seat.tag && (
+                                                        <span className="seatTag">{seat.tag}</span>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
+                                    <div />
+                                </Fragment>
+                            ))}
 
-                        {arrangeMode !== "random" && (
-                            <label className="optionCard cursor-pointer bg-[#141828] sm:col-span-3">
-                                <input
-                                    type="checkbox"
-                                    checked={randomizeWithinGroup}
-                                    onChange={(event) =>
-                                        setRandomizeWithinGroup(event.target.checked)
-                                    }
-                                    className="checkboxField"
-                                />
-                                <span>
-                                    <span className="optionTitle">群內隨機排序</span>
-                                    <span className="block hintText">
-                                        {arrangeMode === "numeric"
-                                            ? numericOrder === "balanced"
-                                                ? "每個高低區段隨機挑一位分到同一群；取消勾選則照固定的蛇形順序分配。"
-                                                : "同一列／排／區塊內的學生順序隨機打亂，群與群之間仍照數值大小。"
-                                            : arrangeMode === "exam" && !examSeparateCategories
-                                              ? "所有學生的順序隨機打亂；取消勾選則照匯入名單的順序填入座位。"
-                                              : "同一類別內的學生順序隨機打亂；取消勾選則照匯入名單的順序。"}
-                                    </span>
-                                </span>
-                            </label>
-                        )}
-                    </div>
-                </section>
-
-                <section aria-label="座位收藏與紀錄" className="panelCard mb-3">
-                    <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-                        <form
-                            onSubmit={saveSeatLayout}
-                            className="flex min-w-0 flex-1 items-end gap-2"
-                        >
-                            <label className="min-w-0 flex-1">
-                                <span className="fieldLabel">收藏名稱</span>
-                                <input
-                                    type="text"
-                                    value={favoriteName}
-                                    maxLength={40}
-                                    onChange={(event) => setFavoriteName(event.target.value)}
-                                    placeholder="例如：三年甲班期中座位"
-                                    required
-                                    className="textField h-10 bg-[#23283D]"
-                                />
-                            </label>
-                            <button
-                                type="submit"
-                                disabled={!favoriteName.trim()}
-                                className="h-10 shrink-0 rounded-lg border border-fuchsia-400 px-3 text-xs font-bold text-fuchsia-400 transition hover:bg-fuchsia-400/10 disabled:cursor-not-allowed disabled:border-[#596178] disabled:text-[#6F778A]"
-                            >
-                                ☆ 收藏
-                            </button>
-                        </form>
-
-                        <button
-                            type="button"
-                            onClick={() => setIsHistoryOpen(true)}
-                            className="h-10 shrink-0 rounded-lg border border-[#596178] bg-[#23283D] px-3 text-xs font-bold text-[#EDF0F4] transition hover:border-fuchsia-400 hover:text-fuchsia-400"
-                        >
-                            座位紀錄（{seatHistory.length}）
-                        </button>
-                    </div>
-                </section>
-
-                <div
-                    onDrop={dropFile}
-                    onDragOver={(e) => {
-                        e.preventDefault();
-                    }}
-                    className="seatGrid"
-                    style={{
-                        gridTemplateColumns: `auto repeat(${colCount}, minmax(0, 1fr)) auto`,
-                    }}
-                >
-                    <div />
-                    <div
-                        className="mb-3 flex justify-center"
-                        style={{ gridColumn: `span ${colCount}` }}
-                    >
-                        <div className="podiumBadge">講臺</div>
-                    </div>
-                    <div />
-
-                    {Array.from({ length: rowCount }, (_, row) => (
-                        <Fragment key={`row-${row}`}>
-                            <div
-                                className={
-                                    "seatHeaderCell group min-w-12" +
-                                    (rowCount > 1 ? " seatHeaderDraggable" : "")
-                                }
-                                draggable={rowCount > 1}
-                                title={rowCount > 1 ? "拖曳列號可與其他列互換" : undefined}
-                                onDragStart={(event) =>
-                                    handleHeaderDragStart(event, ROW_DRAG_TYPE, row)
-                                }
-                                onDragOver={(event) => handleHeaderDragOver(event, ROW_DRAG_TYPE)}
-                                onDragLeave={(event) =>
-                                    event.currentTarget.classList.remove("seatHeaderDropTarget")
-                                }
-                                onDragEnd={(event) =>
-                                    event.currentTarget.classList.remove("seatHeaderDragging")
-                                }
-                                onDrop={(event) => handleHeaderDrop(event, ROW_DRAG_TYPE, row)}
-                            >
-                                {/* 與刪除鈕等寬的佔位，數字才會落在格子正中央。 */}
-                                <span aria-hidden className="size-4 shrink-0" />
-                                <span>{row + 1}</span>
+                            <div className="flex items-center justify-center">
                                 <button
                                     type="button"
-                                    onClick={() => removeRowAt(row)}
-                                    disabled={rowCount <= 1}
-                                    title={`移除第 ${row + 1} 列`}
-                                    aria-label={`移除第 ${row + 1} 列`}
-                                    className="seatHeaderDelete"
+                                    onClick={addRow}
+                                    disabled={rowCount >= MAX_ROW_COUNT}
+                                    title="新增一列"
+                                    aria-label="新增一列"
+                                    className="h-7 px-1.5 text-[11px] functionalButton basicButtonAnimation"
                                 >
-                                    ×
+                                    ＋
                                 </button>
                             </div>
-                            {seatList
-                                .slice(row * colCount, row * colCount + colCount)
-                                .map((seat, col) => {
-                                    const i = row * colCount + col;
-                                    const settleDelay = settleDelays[i];
-                                    return (
-                                        <div
-                                            draggable
-                                            className={
-                                                seat.status +
-                                                " basicSeat" +
-                                                (settleDelay === undefined ? "" : " seatSettling")
-                                            }
-                                            style={
-                                                settleDelay === undefined
-                                                    ? undefined
-                                                    : { animationDelay: `${settleDelay}ms` }
-                                            }
-                                            title={
-                                                seat.pinned
-                                                    ? "已釘選，再抽一次時不會移動"
-                                                    : undefined
-                                            }
-                                            key={
-                                                settleDelay === undefined
-                                                    ? String(i)
-                                                    : `${i}-settle-${settleRun}`
-                                            }
-                                            onClick={() => toggleSeatStatus(i)}
-                                            onContextMenu={(event) => openSeatMenu(event, i)}
-                                            onDragStart={(event) => handleSeatDragStart(event, i)}
-                                            onDragOver={handleSeatDragOver}
-                                            onDragLeave={(event) =>
-                                                event.currentTarget.classList.remove(
-                                                    "border-dashed",
-                                                    "opacity-50",
-                                                )
-                                            }
-                                            onDragEnd={(event) =>
-                                                event.currentTarget.classList.remove(
-                                                    "border-status-dim",
-                                                )
-                                            }
-                                            onDrop={(event) => handleSeatDrop(event, i)}
-                                        >
-                                            {seat.pinned && <PinIcon />}
-                                            {seat.name}
-                                            {seat.tag && (
-                                                <span className="seatTag">{seat.tag}</span>
-                                            )}
-                                        </div>
-                                    );
-                                })}
-                            <div />
-                        </Fragment>
-                    ))}
-
-                    <div className="flex items-center justify-center">
-                        <button
-                            type="button"
-                            onClick={addRow}
-                            disabled={rowCount >= MAX_ROW_COUNT}
-                            title="新增一列"
-                            aria-label="新增一列"
-                            className="h-7 px-1.5 text-[11px] functionalButton basicButtonAnimation"
-                        >
-                            ＋
-                        </button>
-                    </div>
-                    {Array.from({ length: colCount }, (_, col) => (
-                        <div
-                            key={`colHeader-${col}`}
-                            className={
-                                "seatHeaderCell group" +
-                                (colCount > 1 ? " seatHeaderDraggable" : "")
-                            }
-                            draggable={colCount > 1}
-                            title={colCount > 1 ? "拖曳欄號可與其他欄互換" : undefined}
-                            onDragStart={(event) =>
-                                handleHeaderDragStart(event, COLUMN_DRAG_TYPE, col)
-                            }
-                            onDragOver={(event) => handleHeaderDragOver(event, COLUMN_DRAG_TYPE)}
-                            onDragLeave={(event) =>
-                                event.currentTarget.classList.remove("seatHeaderDropTarget")
-                            }
-                            onDragEnd={(event) =>
-                                event.currentTarget.classList.remove("seatHeaderDragging")
-                            }
-                            onDrop={(event) => handleHeaderDrop(event, COLUMN_DRAG_TYPE, col)}
-                        >
-                            {/* 與刪除鈕等寬的佔位，數字才會落在格子正中央。 */}
-                            <span aria-hidden className="size-4 shrink-0" />
-                            <span>{col + 1}</span>
-                            <button
-                                type="button"
-                                onClick={() => removeColumnAt(col)}
-                                disabled={colCount <= 1}
-                                title={`移除第 ${col + 1} 欄`}
-                                aria-label={`移除第 ${col + 1} 欄`}
-                                className="seatHeaderDelete"
-                            >
-                                ×
-                            </button>
+                            {Array.from({ length: colCount }, (_, col) => (
+                                <div
+                                    key={`colHeader-${col}`}
+                                    className={
+                                        "seatHeaderCell group" +
+                                        (colCount > 1 ? " seatHeaderDraggable" : "")
+                                    }
+                                    draggable={colCount > 1}
+                                    title={colCount > 1 ? "拖曳欄號可與其他欄互換" : undefined}
+                                    onDragStart={(event) =>
+                                        handleHeaderDragStart(event, COLUMN_DRAG_TYPE, col)
+                                    }
+                                    onDragOver={(event) =>
+                                        handleHeaderDragOver(event, COLUMN_DRAG_TYPE)
+                                    }
+                                    onDragLeave={(event) =>
+                                        event.currentTarget.classList.remove("seatHeaderDropTarget")
+                                    }
+                                    onDragEnd={(event) =>
+                                        event.currentTarget.classList.remove("seatHeaderDragging")
+                                    }
+                                    onDrop={(event) =>
+                                        handleHeaderDrop(event, COLUMN_DRAG_TYPE, col)
+                                    }
+                                >
+                                    {/* 與刪除鈕等寬的佔位，數字才會落在格子正中央。 */}
+                                    <span aria-hidden className="size-4 shrink-0" />
+                                    <span>{col + 1}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => removeColumnAt(col)}
+                                        disabled={colCount <= 1}
+                                        title={`移除第 ${col + 1} 欄`}
+                                        aria-label={`移除第 ${col + 1} 欄`}
+                                        className="seatHeaderDelete"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            ))}
+                            <div className="flex items-center justify-center">
+                                <button
+                                    type="button"
+                                    onClick={addColumn}
+                                    disabled={colCount >= MAX_COL_COUNT}
+                                    title="新增一欄"
+                                    aria-label="新增一欄"
+                                    className="h-7 px-1.5 text-[11px] functionalButton basicButtonAnimation"
+                                >
+                                    ＋
+                                </button>
+                            </div>
                         </div>
-                    ))}
-                    <div className="flex items-center justify-center">
-                        <button
-                            type="button"
-                            onClick={addColumn}
-                            disabled={colCount >= MAX_COL_COUNT}
-                            title="新增一欄"
-                            aria-label="新增一欄"
-                            className="h-7 px-1.5 text-[11px] functionalButton basicButtonAnimation"
-                        >
-                            ＋
-                        </button>
                     </div>
-                </div>
-                <StatusBar
-                    occupiedCount={seatCounts[seatStatus.occ]}
-                    availableCount={seatCounts[seatStatus.ava]}
-                    unavailableCount={seatCounts[seatStatus.emp]}
-                />
+
+                    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                        <p className="hintText leading-[150%]">
+                            左鍵切換座位狀態，右鍵可修改文字、釘選或刪除學生。Ctrl + Z
+                            可以復原、Ctrl + Y 可以重做。
+                        </p>
+
+                        <StatusBar
+                            occupiedCount={seatCounts[seatStatus.occ]}
+                            availableCount={seatCounts[seatStatus.ava]}
+                            unavailableCount={seatCounts[seatStatus.emp]}
+                        />
+                    </div>
+                </main>
             </div>
 
             <Transition show={importSource !== null}>
@@ -2440,6 +2460,68 @@ export const SeatTable = () => {
                     )}
                 </div>
             )}
+
+            <Transition show={isFavoriteDialogOpen}>
+                <Dialog as="div" className="dialogRoot" onClose={closeFavoriteDialog}>
+                    <div className="dialogBackdrop">
+                        <div className="dialogScroll">
+                            <TransitionChild
+                                enter="ease-out duration-200"
+                                enterFrom="opacity-0 scale-95"
+                                enterTo="opacity-100 scale-100"
+                                leave="ease-in duration-150"
+                                leaveFrom="opacity-100 scale-100"
+                                leaveTo="opacity-0 scale-95"
+                            >
+                                <DialogPanel className="dialogPanel max-w-sm">
+                                    <form onSubmit={saveSeatLayout}>
+                                        <DialogTitle as="h3" className="dialogTitle">
+                                            收藏目前座位
+                                        </DialogTitle>
+                                        <p className="fieldNote">
+                                            將目前的 {rowCount} × {colCount}{" "}
+                                            座位配置存成一筆紀錄，最多保留 {MAX_HISTORY_COUNT} 筆。
+                                        </p>
+
+                                        <label className="mt-5 block">
+                                            <span className="fieldLabel">收藏名稱</span>
+                                            <input
+                                                type="text"
+                                                autoFocus
+                                                value={favoriteName}
+                                                maxLength={40}
+                                                onChange={(event) =>
+                                                    setFavoriteName(event.target.value)
+                                                }
+                                                placeholder="例如：三年甲班期中座位"
+                                                required
+                                                className="textField h-10 bg-[#1C2133]"
+                                            />
+                                        </label>
+
+                                        <div className="dialogActions">
+                                            <button
+                                                type="button"
+                                                onClick={closeFavoriteDialog}
+                                                className="dialogButton dialogButtonGhost"
+                                            >
+                                                取消
+                                            </button>
+                                            <button
+                                                type="submit"
+                                                disabled={!favoriteName.trim()}
+                                                className="dialogButton dialogButtonPrimary"
+                                            >
+                                                儲存收藏
+                                            </button>
+                                        </div>
+                                    </form>
+                                </DialogPanel>
+                            </TransitionChild>
+                        </div>
+                    </div>
+                </Dialog>
+            </Transition>
 
             <Transition show={renameSeatIndex !== null}>
                 <Dialog as="div" className="dialogRoot" onClose={closeSeatRename}>

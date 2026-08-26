@@ -10,12 +10,21 @@ if (started) {
 const createWindow = () => {
     // Create the browser window.
     const mainWindow = new BrowserWindow({
-        width: 800,
-        height: 500,
+        width: 1180,
+        height: 760,
+        minWidth: 960,
+        minHeight: 620,
+        // 先隱藏並指定底色，避免載入時閃一下白畫面。
+        show: false,
+        backgroundColor: "#141828",
         frame: false,
         webPreferences: {
             preload: path.join(__dirname, "preload.js"),
         },
+    });
+
+    mainWindow.once("ready-to-show", () => {
+        mainWindow.show();
     });
 
     // and load the index.html of the app.

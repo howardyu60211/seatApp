@@ -1,9 +1,10 @@
 @import "tailwindcss";
 
 @layer components {
+    /* 高度交給 .seatGrid 的列高（1fr）撐開，只保留最小高度。 */
     .basicSeat {
-        @apply mx-1 my-1 h-8 px-2 py-2
-        font-bold text-center align-middle
+        @apply flex h-full min-h-8 min-w-0 items-center justify-center px-2
+        font-bold text-center
         transition-all bg-transparent
         border-2 border-solid rounded-lg
         shadow-none cursor-pointer text-xs
@@ -44,7 +45,7 @@
     }
 
     .seatHeaderCell {
-        @apply mx-1 my-1 flex h-8 items-center justify-center gap-1
+        @apply flex h-full min-h-8 items-center justify-center gap-1
         select-none text-[11px] font-bold text-[#7F8798];
     }
 
@@ -77,7 +78,7 @@
     }
 
     .functionalButton {
-        @apply select-none h-11 px-4 mb-0
+        @apply select-none h-10 px-4 mb-0
         font-bold text-center uppercase align-middle
         bg-transparent border border-solid rounded-lg
         shadow-none cursor-pointer text-xs text-fuchsia-400 
@@ -265,9 +266,14 @@
         @apply w-full rounded-[14px] border border-[#444B5F] bg-[#1C2133] p-4;
     }
 
-    /* 欄數由行內 style 的 gridTemplateColumns 決定。 */
+    /* 左側控制欄：固定寬度，內容過長時自行捲動。 */
+    .sidebarPanel {
+        @apply flex w-[320px] shrink-0 flex-col gap-3 overflow-y-auto pr-1;
+    }
+
+    /* 欄數與列高由行內 style 的 gridTemplate* 決定。 */
     .seatGrid {
-        @apply grid w-full rounded-[16px] border border-[#444B5F] bg-[#23283D] p-[24px];
+        @apply grid min-h-full w-full gap-2 rounded-[16px] border border-[#444B5F] bg-[#23283D] p-5;
     }
 
     .podiumBadge {
