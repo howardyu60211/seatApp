@@ -5,7 +5,7 @@
     "description": "學生座位編排程式 — 建立座位表、匯入名單、隨機分配並匯出 XLSX / PDF / PNG",
     "main": ".vite/build/main.js",
     "engines": {
-        "node": ">=20.19.0"
+        "node": ">=22.12.0"
     },
     "scripts": {
         "start": "electron-forge start",
@@ -54,9 +54,9 @@
         "@types/electron-squirrel-startup": "^1.0.2",
         "@types/file-saver": "^2.0.7",
         "@types/react": "^19.2.18",
-        "@types/react-dom": "^19.2.4",
-        "electron": "^43.4.1",
-        "electron-builder": "^24.13.3",
+        "@types/react-dom": "^19.2.5",
+        "electron": "^44.0.0",
+        "electron-builder": "^26.15.3",
         "eslint": "^9.39.5",
         "eslint-config-prettier": "^10.1.8",
         "eslint-import-resolver-typescript": "^4.4.5",
@@ -67,8 +67,8 @@
         "tailwindcss": "^4.3.3",
         "ts-node": "^10.9.2",
         "typescript": "^6.0.3",
-        "typescript-eslint": "^8.67.0",
-        "vite": "^5.4.21"
+        "typescript-eslint": "^8.68.0",
+        "vite": "^6.4.3"
     },
     "keywords": [],
     "author": {
@@ -83,6 +83,6 @@
         "jspdf": "^4.2.1",
         "react": "^19.2.8",
         "react-dom": "^19.2.8",
-        "xlsx": "^0.18.5"
+        "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
     }
 }
