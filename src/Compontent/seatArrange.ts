@@ -256,10 +256,12 @@ const dealStudentsEvenly = (
 
     while (cursor < students.length) {
         // 每輪重算還有空位的群，座位數不同的群額滿後就自動退出。
-        const openGroups = groups.slice(0, usedGroupCount).reduce<number[]>((open, group, index) => {
-            if (buckets[index].length < group.length) open.push(index);
-            return open;
-        }, []);
+        const openGroups = groups
+            .slice(0, usedGroupCount)
+            .reduce<number[]>((open, group, index) => {
+                if (buckets[index].length < group.length) open.push(index);
+                return open;
+            }, []);
         if (openGroups.length === 0) break;
 
         const chunk = students.slice(cursor, cursor + openGroups.length);
